@@ -17,10 +17,37 @@ Yb,_,dP       `8b,          88       Yb, `YbadP' ,d8b,_
  
  Based on libtcod
  
+ 
+ *********
+ * SETUP *
+ *********
+ 
  You will need Python (v2.7.13) installed to run.   (https://www.python.org/downloads/)
  You will need PyGame installed for audio to work   (https://www.pygame.org/wiki/GettingStarted)
            No-Audio version will be added. 
            You could also comment-out or remove audio-related code if desired.
+ 
+ **************
+ *  CONTROLS  *
+ **************
+ 
+    8-Directional movement using numpad keys (Numpad 5 is wait/skip turn)
+    4-Directional movement using arrow keys
+    
+    [c] Close Doors
+        press [c] and then a directional key
+    
+    [i] Inventory
+        press [i] to open your inventory
+            press [i] or [esc] to close the inventory
+            press a letter key next to an item to use that item
+    
+    [k] Kick
+        press [k] and then a directional key
+        
+    [s] Stats
+        press [s] to open your stats menu
+            press [s] or [esc] to close the stats menu
  
     - Known Issues -
     
