@@ -1269,7 +1269,7 @@ def make_door(x, y):
                 
                 if not other_doors:
                     #create a door object
-                    print "t ... door at : " + str(x) + "," + str(y)
+                    #print "t ... door at : " + str(x) + "," + str(y)
                     item_component = Item(use_function=use_door, pickup_sound=None, use_sound=SFX_DOOR)
                     item = Object(x, y, '+', 'closed door', libtcod.white, item=item_component)
                       
