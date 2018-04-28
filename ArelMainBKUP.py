@@ -7,6 +7,7 @@ import shelve
 import random
 import pygame
 import datetime
+import time
 
 #actual size of the window
 SCREEN_WIDTH = 80
@@ -35,7 +36,7 @@ MAX_ROOMS = 30
 DEPTH = 7
 MIN_SIZE = 6
 FULL_ROOMS = False
-DOOR_CHANCE = 25
+DOOR_CHANCE = 80
  
 #how much does an oil flask fill?
 OIL_LAMP = 60
@@ -369,7 +370,7 @@ def DijkHeat(cmap, infov=False, limit=9):
                     pass
                 elif v < limit:
                     libtcod.console_set_char_background(0, x, y, color, libtcod.BKGND_SCREEN)
-        
+                
         
 class DijkstraMap:
 
@@ -402,49 +403,36 @@ class DijkstraMap:
     def clear_goals(self):
         self.goals = []
         
-    def recalculate_map(self, doorstop = False):
+    def recalculate_map(self, default=9, doorstop = False):
         """
         Use Dijkstra's Algorithm to calculate the movement score towards
         goals in this map
         """
         
-        #print ""
-        #print "started full dijkstra"
-        #s = datetime.datetime.now()
-        #print s        
-        
-        #self._clear_map()
+        self._clear_map(default)
         changed = True
         while changed:
             changed = False
             for y in range(0, self.height):
                 for x in range(0, self.width):
                     if map[x][y].block_sight and map[x][y].is_door == False:
+                        #walls
                         pass
-                    elif map[x][y].is_door and doorstop:
+                    elif map[x][y].is_door and map[x][y].block_sight and doorstop:
+                        #if doorstop=True, a closed door will stop the progression
                         pass
                     else:
                         lowest_neighbor = self._get_lowest_neighbor_value(x, y)
                         if self.tiles[x][y] > lowest_neighbor + 1:
                             self.tiles[x][y] = lowest_neighbor + 1
                             changed = True
-        
-        #e = datetime.datetime.now()
-        #print "finished dijkstra"
-        #print str(e)
-        #print "(" + str(e - s) + ")"
     
     def recalculate_single(self, tx, ty, drange=9, doorstop=False):
         """
         rebuild dijkstra with only one goal..
-        rebuilds only area around the goal in order to speed up
+        rebuilds only area around the goal in order to speed up processing time
         tx, ty = targetx, targety
-        """
-        
-        #print ""
-        #print "started single dijkstra"
-        #s = datetime.datetime.now()
-        #print s        
+        """      
         
         self._clear_map(drange)
         changed = True
@@ -454,45 +442,16 @@ class DijkstraMap:
                 for x in range(0-drange, drange):
                     if self.point_in_map(tx+x, ty+y):
                         if map[tx+x][ty+y].block_sight and map[tx+x][ty+y].is_door == False:
+                            #walls stop the progression of a sound wave
                             pass
-                        elif map[tx+x][ty+y].is_door and doorstop:
+                        elif map[tx+x][ty+y].is_door and map[tx+x][ty+y].block_sight and doorstop:
+                            #if doorstop=True, a closed door will stop the progression of a sound wave
                             pass
                         else:
                             lowest_neighbor = self._get_lowest_neighbor_value(tx+x, ty+y)
                             if self.tiles[tx+x][ty+y] > lowest_neighbor + 1:
                                 self.tiles[tx+x][ty+y] = lowest_neighbor + 1
                                 changed = True
-        
-        #e = datetime.datetime.now()
-        #print "finished dijkstra"
-        #print str(e)
-        #print "(" + str(e - s) + ")"
-        
-        self.add_to_doors()
-        #print self
-        
-    def add_to_doors(self, r=1, weight=1):
-        x=1
-        #print ""
-        #print "started door check"
-        #s = datetime.datetime.now()
-        #print s  
-
-        #add weight around doors in tile range door+r 
-        #for obj in objects:
-        #    if map[obj.x][obj.y].is_door:
-        #        for y in range (-r, r):
-        #            for x in range (-r, r):
-        #               if in_map_range(obj.x+x, obj.y+y):
-        #                    if map[obj.x+x][obj.y+y].block_sight and map[obj.x+x][obj.y+y].is_door == False:
-        #                        pass
-        #                    else:
-        #                        self.tiles[obj.x + x][obj.y + y] += weight
-                
-        #e = datetime.datetime.now()
-        #print ""
-        #print "finished door check"
-        #print "(" + str(e - s) + ")"
     
     def get_move_options(self, x, y):
         """
@@ -919,9 +878,10 @@ def map_sound(sourcex, sourcey, intensity=1):
     sound_dijkstra.recalculate_single(sourcex, sourcey, 15, True)
     
 
-def decay_sound(decayrate = 1):
+def decay_map(map, decayrate = 1):
     
-    map = sound_dijkstra
+    if map == None:
+        map = sound_dijkstra
     
     changes = True
     
@@ -948,7 +908,8 @@ def Burn_Torch():
     
     
 def in_map_range(x, y):
-    return 0 < x < MAP_WIDTH and 0 < y < MAP_HEIGHT
+    if 0 < x < MAP_WIDTH and 0 < y < MAP_HEIGHT:
+        return True
 
 def tile_blocked(x, y):
     blocked = False
@@ -1179,6 +1140,13 @@ def make_bsp():
     player.x = player_room[0]
     player.y = player_room[1]
  
+    #try 100 times to make doors
+    for attempts in range(0, 500):
+        tx = libtcod.random_get_int(0, 1, MAP_WIDTH - 1)
+        ty = libtcod.random_get_int(0, 1, MAP_HEIGHT - 1)
+        
+        make_door(tx, ty)
+ 
     #Add monsters and items
     for room in bsp_rooms:
         new_room = Rect(room[0], room[1], 2, 2)
@@ -1273,41 +1241,49 @@ def traverse_node(node, dat):
  
     return True
     
-def make_door(map, x, y):
-    global fov_recompute
+def make_door(x, y):
+    global map
     
-    bcontinue = True
-
-    for tx in range(-2, 2):
-        for ty in range(-2,2):
-            if in_map_range(x+tx, y+ty):    
-                #already a door
-                if map[x+tx][y+ty].is_door:
-                    bcontinue = False
-    
-    #check x,y in range
-    if in_map_range(x, y):
-        #check for hallways
-        if (map[x-1][y].block_sight == True and map[x+1][y].block_sight == True) or (map [x][y-1].block_sight == True and map[x][y+1].block_sight == True):
-            bcontinue = True
-        else:
-            bcontinue = False
+    #check against DOOR_CHANCE %
+    door_check = libtcod.random_get_int(0, 100, 1)
+    #print str(DOOR_CHANCE) + " > " + str(door_check) + "?"
+    if (DOOR_CHANCE >= door_check):
+        #print "t ... in range? " + str(x) + "," + str(y) + "?"
+        if 0 < x < (MAP_WIDTH - 1) and 0 < y < (MAP_HEIGHT - 1):
+            #print "t ... hallway?"
+            hallway = False
+            if (map[x-1][y].block_sight == True and map[x+1][y].block_sight == True and map[x][y].block_sight == False):
+                hallway = True
+            elif (map [x][y-1].block_sight == True and map[x][y+1].block_sight == True and map[x][y].block_sight == False):
+                hallway = True
+                
+            if hallway:
+                
+                other_doors = False
+                #check for nearby doors
+                for tx in range(-2, 2):
+                    for ty in range(-2, 2):
+                        if in_map_range(x+tx, y+ty):
+                            if map[x+tx][y+ty].is_door:
+                                other_doors = True
+                
+                if not other_doors:
+                    #create a door object
+                    print "t ... door at : " + str(x) + "," + str(y)
+                    item_component = Item(use_function=use_door, pickup_sound=None, use_sound=SFX_DOOR)
+                    item = Object(x, y, '+', 'closed door', libtcod.white, item=item_component)
+                      
+                    objects.append(item)
+                
+                    map[x][y].block_sight = True
+                    map[x][y].is_door = True
+                    map[x][y].blocked = True
             
-    if bcontinue:    
-        #check against DOOR_CHANCE %
-        door_check = libtcod.random_get_int(0, 100, 1)
-        if (DOOR_CHANCE >= door_check):
-                #create a door object
-                item_component = Item(use_function=use_door, pickup_sound=None, use_sound=SFX_DOOR)
-                item = Object(x, y, '+', 'closed door', libtcod.white, item=item_component)
-                  
-                objects.append(item)
-        
-    for obj in objects:
-        if obj.name == "closed door":
-            map[obj.x][obj.y].block_sight = True
-            map[obj.x][obj.y].is_door = True
-            map[obj.x][obj.y].blocked = True
+    #for obj in objects:
+    #    if obj.name == "closed door":
+    #        map[obj.x][obj.y].block_sight = True
+    #        map[obj.x][obj.y].is_door = True
+    #        map[obj.x][obj.y].blocked = True
 
 def try_kick():
     global blood_map
@@ -1358,7 +1334,7 @@ def try_kick():
                             player.fighter.take_damage(3)
                             
                     else:
-                        if map[obj.x+dx][obj.y+dy].block_sight or map[obj.x+dx][obj.y+dy].is_door or map[obj.x+dx][obj.y+dy].blocked:
+                        if (map[obj.x+dx][obj.y+dy].block_sight and map[obj.x+dx][obj.y+dy].is_door == False) or map[obj.x+dx][obj.y+dy].blocked:
                             message('You kick the ' + obj.name +', but it does not budge.', libtcod.gray)
                             
                         elif obj.fighter:
@@ -1369,6 +1345,7 @@ def try_kick():
                             blood_map[obj.x+dx][obj.y+dy] = 1
                             obj.x = obj.x + dx
                             obj.y = obj.y +dy
+                            message('You kick the ' + obj.name + '.', libtcod.gray)
                         else:
                             obj.x = obj.x + dx
                             obj.y = obj.y +dy
@@ -1416,13 +1393,17 @@ def try_close_door():
         for obj in objects:
             if obj.x == player.x+dx and obj.y == player.y+dy and obj.name == 'open door':
                 if is_blocked(obj.x, obj.y):
-                    message('Something is blocking the door.',libtcod.white)
+                    message('Something is blocking the door.',libtcod.lightest_red)
                 else:
                     obj.item.use_function(player.x+dx, player.y+dy)
+                    message('You swing the door shut.', libtcod.gray)
+                    map_sound(player.x+dx, player.y+dy, intensity=15)
                 
     else:
         message('No door in that direction to close.', libtcod.white)
             
+
+
 def vline(map, x, y1, y2):
     if y1 > y2:
         y1,y2 = y2,y1
@@ -1430,51 +1411,37 @@ def vline(map, x, y1, y2):
     for y in range(y1,y2+1):
         map[x][y].blocked = False
         map[x][y].block_sight = False
-        
-    make_door(map, x, y2-1)
  
 def vline_up(map, x, y):
-
     while y >= 0 and map[x][y].blocked == True:
         map[x][y].blocked = False
         map[x][y].block_sight = False
         y -= 1
-
-    make_door(map, x, y+1) 
-       
+ 
 def vline_down(map, x, y):
-
     while y < MAP_HEIGHT and map[x][y].blocked == True:
         map[x][y].blocked = False
         map[x][y].block_sight = False
         y += 1
  
-    make_door(map, x, y-1) 
-
 def hline(map, x1, y, x2):
     if x1 > x2:
         x1,x2 = x2,x1
     for x in range(x1,x2+1):
         map[x][y].blocked = False
         map[x][y].block_sight = False
-        
-    make_door(map, x2-1, y) 
  
 def hline_left(map, x, y):
     while x >= 0 and map[x][y].blocked == True:
         map[x][y].blocked = False
         map[x][y].block_sight = False
         x -= 1
-        
-    make_door(map, x+1, y) 
-         
+ 
 def hline_right(map, x, y):
     while x < MAP_WIDTH and map[x][y].blocked == True:
         map[x][y].blocked = False
         map[x][y].block_sight = False
         x += 1
-   
-    make_door(map, x-1, y) 
            
 def random_choice_index(chances):  #choose one option from list of chances, returning its index
     #the dice will land on some number between 1 and the sum of the chances
@@ -1525,6 +1492,7 @@ def place_objects(room):
     item_chances['gold'] = 5 #always shows up  
     item_chances['oil'] = 35 #always shows up
     item_chances['heal'] = 20  #healing potion always shows up, even if all other items have 0 chance
+    item_chances['magic map'] = 2
     item_chances['lightning'] = from_dungeon_level([[25, 3]])
     item_chances['fireball'] =  from_dungeon_level([[25, 4]])
     item_chances['confuse'] =   from_dungeon_level([[10, 2]])
@@ -1592,42 +1560,47 @@ def place_objects(room):
             if choice == 'heal':
                 #create a healing potion
                 item_component = Item(stacks=False, count=1, use_function=cast_heal, pickup_sound=SFX_POTIONPICKUP, use_sound=SFX_POTIONUSE)
-                item = Object(x, y, '!', 'healing potion', libtcod.light_violet, item=item_component)
+                item = Object(x, y, '!', 'Healing Potion', libtcod.light_violet, item=item_component)
                 
             elif choice == 'gold':
                 #create a gold pile
                 item_component = Item(stacks=True, count=10, use_function=throw_gold, pickup_sound=SFX_GOLDPICKUP, use_sound=SFX_GOLDPICKUP)
-                item = Object(x, y, '$', 'gold', libtcod.light_yellow, item=item_component)
+                item = Object(x, y, '$', 'Gold', libtcod.light_yellow, item=item_component)
             
             elif choice == 'oil':
                 #create an oil lamp
                 item_component = Item(stacks=False, count=1, use_function=use_oil, pickup_sound=SFX_POTIONPICKUP, use_sound=None)
                 item = Object(x, y, '!', 'Oil Flask', libtcod.light_yellow, item=item_component)
             
+            elif choice == 'magic map':
+                #create a scroll of magic maping
+                item_component = Item(stacks=True, count=1, use_function=cast_magicmap, pickup_sound=SFX_SCROLLPICKUP, use_sound=None)
+                item = Object(x, y, '#', 'Scroll of Magical Mapping', libtcod.light_yellow, item=item_component)
+            
             elif choice == 'lightning':
                 #create a lightning bolt scroll
                 item_component = Item(use_function=cast_lightning, pickup_sound=SFX_SCROLLPICKUP, use_sound=SFX_LIGHTNINGHIT)
-                item = Object(x, y, '#', 'scroll of lightning bolt', libtcod.light_yellow, item=item_component)
+                item = Object(x, y, '#', 'Scroll of Lightning Bolt', libtcod.light_yellow, item=item_component)
  
             elif choice == 'fireball':
                 #create a fireball scroll
                 item_component = Item(use_function=cast_fireball, pickup_sound=SFX_SCROLLPICKUP, use_sound=SFX_FIREBALLHIT)
-                item = Object(x, y, '#', 'scroll of fireball', libtcod.light_yellow, item=item_component)
+                item = Object(x, y, '#', 'Scroll of Fireball', libtcod.light_yellow, item=item_component)
  
             elif choice == 'confuse':
                 #create a confuse scroll
                 item_component = Item(use_function=cast_confuse, pickup_sound=SFX_SCROLLPICKUP, use_sound=SFX_CONFUSEHIT)
-                item = Object(x, y, '#', 'scroll of confusion', libtcod.light_yellow, item=item_component)
+                item = Object(x, y, '#', 'Scroll of Confusion', libtcod.light_yellow, item=item_component)
  
             elif choice == 'sword':
                 #create a sword
                 equipment_component = Equipment(slot='right hand', strength_bonus=3)
-                item = Object(x, y, '/', 'sword', libtcod.sky, equipment=equipment_component)
+                item = Object(x, y, '/', 'Sword', libtcod.sky, equipment=equipment_component)
  
             elif choice == 'shield':
                 #create a shield
                 equipment_component = Equipment(slot='left hand', ac_bonus=1)
-                item = Object(x, y, '[', 'shield', libtcod.darker_orange, equipment=equipment_component)
+                item = Object(x, y, '[', 'Shield', libtcod.darker_orange, equipment=equipment_component)
  
             objects.append(item)
             item.send_to_back()  #items appear below other objects
@@ -1663,6 +1636,8 @@ def get_names_under_mouse():
              if obj.x == x and obj.y == y and libtcod.map_is_in_fov(fov_map, obj.x, obj.y)]
  
     names = ', '.join(names)  #join the names, separated by commas
+    
+    #return str(x) + "," + str(y)
     return names
  
 def render_all():
@@ -1711,6 +1686,8 @@ def render_all():
         if object != player:
             object.draw()
     player.draw()
+    
+    
  
     #blit the contents of "con" to the root console
     libtcod.console_blit(con, 0, 0, MAP_WIDTH, MAP_HEIGHT, 0, 0, 0)
@@ -1720,6 +1697,38 @@ def render_all():
     #                    if not map[x][y].blocked:
     #                        libtcod.console_print_ex(0, x, y, libtcod.BKGND_NONE, libtcod.CENTER, str(player_dijkstra.cell_at(x, y)))
  
+    #draw context hints for the first dungeon level
+    if dungeon_level == 1:
+        libtcod.console_set_default_background(0, libtcod.darker_gray)
+        libtcod.console_set_default_foreground(0, libtcod.white)
+        
+        if player.y >= MAP_HEIGHT/2: #player on bottom half of the screen
+            (tx, ty) = (77, 2)
+        else: #player on top half of the map
+            (tx, ty) = (77, 42)
+        
+        for object in objects:
+            if object.x == player.x and object.y == player.y:
+                if object.item:
+                    if map[player.x][player.y].is_door == False:
+                        libtcod.console_print_ex(0, tx, ty, libtcod.BKGND_SET, libtcod.RIGHT, " Press [g] to grab items. ")
+                if object.name == "stairs":
+                        libtcod.console_print_ex(0, tx, ty, libtcod.BKGND_SET, libtcod.RIGHT, " Press [,] to go down the stairs. ")
+                        
+        myneighbors = [(-1, -1), (0, -1), (1, -1),
+                     (-1, 0), (1, 0),
+                     (-1, 1), (0, 1), (1, 1)]
+                     
+        for dx, dy in myneighbors:
+            tdx, tdy = player.x + dx, player.y + dy
+            if map[tdx][tdy].is_door:
+                if map[tdx][tdy].block_sight:
+                    libtcod.console_print_ex(0, tx, ty, libtcod.BKGND_SET, libtcod.RIGHT, " Bump into a closed door to open it. ")
+                        
+                else:  
+                    libtcod.console_print_ex(0, tx, ty, libtcod.BKGND_SET, libtcod.RIGHT, " Press [c] and then a direction to close an open door. ")
+                                
+                    
     #prepare to render the GUI panel
     libtcod.console_set_default_background(panel, libtcod.black)
     libtcod.console_clear(panel)
@@ -1798,8 +1807,10 @@ def player_move_or_attack(dx, dy):
         player.move(dx, dy)
         player_dijkstra.clear_goals()
         player_dijkstra.add_goal(player.x, player.y)
+        #player_dijkstra.recalculate_single(player.x, player.y)
         player_dijkstra.recalculate_single(player.x, player.y)
         fov_recompute = True
+
         
 def menu(header, options, width):
     if len(options) > 26: raise ValueError('Cannot have a menu with more than 26 options.')
@@ -1907,6 +1918,8 @@ def handle_keys():
             
         elif key.vk == libtcod.KEY_KP5:
             pass  #do nothing ie wait for the monster to come to you
+            
+                    
         else:
             #test for other keys
             key_char = chr(key.c)
@@ -1947,7 +1960,7 @@ def handle_keys():
                        '\nExperience to level up: ' + str(level_up_xp) + '\n\nMaximum HP: ' + str(player.fighter.max_hp) +
                        '\nAttack: ' + str(player.fighter.strength) + '\nac: ' + str(player.fighter.ac), CHARACTER_SCREEN_WIDTH)
  
-            elif key_char == ',':
+            elif key_char == ",":
                 #go down stairs, if the player is on them
                 if stairs.x == player.x and stairs.y == player.y:
                     next_level()
@@ -1964,20 +1977,22 @@ def check_level_up():
         message('Your battle skills grow stronger! You reached level ' + str(player.level) + '!', libtcod.yellow)
         Play_BGSFX(SFX_LEVELUP)
  
-        choice = None
-        while choice == None:  #keep asking until a choice is made
-            choice = menu('Level up! Choose a stat to raise:\n',
-                          ['Constitution (+20 HP, from ' + str(player.fighter.max_hp) + ')',
-                           'Strength (+1 attack, from ' + str(player.fighter.strength) + ')',
-                           'Agility (+1 ac, from ' + str(player.fighter.ac) + ')'], LEVEL_SCREEN_WIDTH)
+        if player.level % 2 == 0: #even-number levels grant stat bonuses
  
-        if choice == 0:
-            player.fighter.base_max_hp += 20
-            player.fighter.hp += 20
-        elif choice == 1:
-            player.fighter.base_strength += 1
-        elif choice == 2:
-            player.fighter.base_ac += 1
+            choice = None
+            while choice == None:  #keep asking until a choice is made
+                choice = menu('Level up! Choose a stat to raise:\n',
+                              ['Constitution (+20 HP, from ' + str(player.fighter.max_hp) + ')',
+                               'Strength (+1 attack, from ' + str(player.fighter.strength) + ')',
+                               'Agility (+1 ac, from ' + str(player.fighter.ac) + ')'], LEVEL_SCREEN_WIDTH)
+     
+            if choice == 0:
+                player.fighter.base_max_hp += 20
+                player.fighter.hp += 20
+            elif choice == 1:
+                player.fighter.base_strength += 1
+            elif choice == 2:
+                player.fighter.base_ac += 1
  
 def player_death(player):
     #the game ended!
@@ -2082,6 +2097,52 @@ def use_oil():
         player.oil = player.max_oil_level
     TORCH_RADIUS = int((player.oil) % (player.max_oil_level)/10) 
     fov_recompute = True
+    
+def cast_magicmap():
+    global fov_recompute, TORCH_RADIUS
+                
+    mrange = 15
+    
+    #make dijsktra map with player as goal
+    magic_dijsktra = DijkstraMap(MAP_WIDTH, MAP_HEIGHT)
+    magic_dijsktra._clear_map(default=mrange)
+    magic_dijsktra.add_goal(player.x, player.y)
+    magic_dijsktra.recalculate_map(default=mrange)
+    
+    changes = True
+    icount = 0
+    while changes == True:
+        #magic_dijsktra.recalculate_map()
+        icount = icount + 1
+        changes = False
+        for y in range(MAP_HEIGHT):
+            for x in range(MAP_WIDTH):
+                v = magic_dijsktra.tiles[x][y]
+                
+                if v > icount:
+                    pass
+                elif v == icount:
+                    libtcod.console_set_char_background(0, x, y, libtcod.light_yellow, libtcod.BKGND_SCREEN)
+                    changes = True
+                    map[x][y].explored = True
+                elif v == icount - 1:
+                    libtcod.console_set_char_background(0, x, y, libtcod.lighter_yellow, libtcod.BKGND_SCREEN)
+                    changes = True
+                    map[x][y].explored = True
+                elif v == icount - 2:
+                    libtcod.console_set_char_background(0, x, y, libtcod.lightest_yellow, libtcod.BKGND_SCREEN)
+                    changes = True
+                    map[x][y].explored = True
+                elif v == icount - 3:
+                    libtcod.console_set_char_background(0, x, y, libtcod.white, libtcod.BKGND_SCREEN)
+                    changes = True
+                    map[x][y].explored = True
+
+                        
+        libtcod.console_flush()
+        fov_recompute = True
+        render_all()
+
                 
 def cast_heal():
     #heal the player
@@ -2218,7 +2279,7 @@ def new_game():
     player.max_oil_level = 100
     player.oil = player.max_oil_level
  
-    #generate map (at this point it's not drawn to the screenf
+    #generate map (at this point it's not drawn to the screen
     dungeon_level = 1
     #make_map()
     make_bsp()
@@ -2240,13 +2301,22 @@ def new_game():
     inventory.append(obj)
     equipment_component.equip()
     
+    #create a scroll of magic mapping
+    #item_component = Item(stacks=True, count=1, use_function=cast_magicmap, pickup_sound=SFX_SCROLLPICKUP, use_sound=None)
+    #item = Object(0, 0, '#', 'Scroll of Magic Map', libtcod.light_yellow, item=item_component)
+    #inventory.append(item)
+    
 def next_level():
     Play_BGSFX(SFX_Stairs)
     #advance to the next level
     global dungeon_level
     message('You take a moment to rest, and recover your strength.', libtcod.light_violet)
     player.fighter.heal(player.fighter.max_hp / 2)  #heal the player by 50%
- 
+    
+    for y in range(MAP_HEIGHT):
+        for x in range(MAP_WIDTH):
+            blood_map[x][y] = 0
+    
     dungeon_level += 1
     message('You descend deeper into the heart of the dungeon...', libtcod.light_red)
     make_bsp()  #create a fresh new level!
@@ -2289,6 +2359,7 @@ def play_game():
     player_dijkstra.add_goal(player.x, player.y)
     player_dijkstra.recalculate_map()
     
+    
     #main loop
     while not libtcod.console_is_window_closed():
         libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS | libtcod.EVENT_MOUSE_RELEASE, key, mouse)
@@ -2308,7 +2379,7 @@ def play_game():
             object.clear()
 
         #decay sound/scent maps
-        decay_sound()
+        decay_map(sound_dijkstra)
           
         #handle keys and exit game if needed
         player_action = handle_keys()

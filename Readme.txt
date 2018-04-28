@@ -12,7 +12,7 @@ Yb,_,dP       `8b,          88       Yb, `YbadP' ,d8b,_
  
  A'Rel Readme
  
- v 0.0.0.1
+ v 0.0.0.3
  ObservantDoggo
  
  Based on libtcod
@@ -35,7 +35,7 @@ Yb,_,dP       `8b,          88       Yb, `YbadP' ,d8b,_
     4-Directional movement using arrow keys
     
     [c] Close Doors
-        press [c] and then a directional key
+        press [c] and then a directional key (bug; directional prompt will not show until after a direction is chosen)
     
     [i] Inventory
         press [i] to open your inventory
@@ -43,20 +43,51 @@ Yb,_,dP       `8b,          88       Yb, `YbadP' ,d8b,_
             press a letter key next to an item to use that item
     
     [k] Kick
-        press [k] and then a directional key
+        press [k] and then a directional key  (bug; directional prompt will not show until after a direction is chosen)
         
     [s] Stats
         press [s] to open your stats menu
             press [s] or [esc] to close the stats menu
  
-    - Known Issues -
+    ****************
+    * Known Issues *
+    ****************
     
-    Placement issues with doors on occasion
-        - Could cause doorways off the edge of the map. If a
-            player or monster tries to move out of the
-            range of the map in this way, it will crash the
-            game.
+    Render issues with blood and close/kick directional prompts.
     
-    Gold re-stacking when thrown
+    Gold piles not always re-stacking correctly when thrown
+    
+    **************
+    * Change log *
+    **************
+    
+    v 0.0.0.3 
+    4/27/18
+    
+        1) Overview
+            A)Decided it was a good idea to start a change long.
+                - Started a change log    
+                - Started possibly overly-complicated formatting for said change log.
+            
+        2) New Mechanics
+            A) Light
+                - FoV based on current oil levels, decays over turns
+            B) Combat update ** NOT CURRENTLY BALANCED **
+                - Less random, more deterministic 
+        
+        3) New Items
+            A) 'Scroll of Magical Mapping'
+                - def cast_magicmap
+            B) 'Oil Flask'
+                - def use_oil
+                
+        4) Misc
+            A) New Player Tips
+                - Interaction/context tips will show up on the first dungeon level
+                
+        4) Bug Fixes
+            A) Doors
+                - Updated placement conditions
+                    - This seems to have corrected issue of actors being able to walk off the map
     
     
