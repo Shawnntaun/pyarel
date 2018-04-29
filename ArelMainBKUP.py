@@ -96,6 +96,7 @@ SFX_POTIONPICKUP = 'audio/sfx/PICKUPHealthPot.wav'
 SFX_SCROLLPICKUP = 'audio/sfx/PICKUPScroll.wav'
 
 SFX_POTIONUSE = 'audio/sfx/USEHealthPot.wav'
+SFX_MAGICMAPUSE = 'audio/sfx/USEMagicMap.wav'
 
 SFX_DOOR = 'audio/sfx/USEDoor.wav'
 SFX_DOORSHAKE = 'audio/sfx/SFXDoorShake.wav'
@@ -1268,7 +1269,7 @@ def make_door(x, y):
                                 other_doors = True
                 
                 if not other_doors:
-                    #create a door object
+                    #create a door object,
                     #print "t ... door at : " + str(x) + "," + str(y)
                     item_component = Item(use_function=use_door, pickup_sound=None, use_sound=SFX_DOOR)
                     item = Object(x, y, '+', 'closed door', libtcod.white, item=item_component)
@@ -2100,8 +2101,12 @@ def use_oil():
     
 def cast_magicmap():
     global fov_recompute, TORCH_RADIUS
-                
-    mrange = 15
+    
+    #magic map sound is here instead of in the item component.
+    #if it is in the item component, it doesnt play until after the effect
+    Play_ItemSFX(SFX_MAGICMAPUSE)
+    
+    mrange = 18
     
     #make dijsktra map with player as goal
     magic_dijsktra = DijkstraMap(MAP_WIDTH, MAP_HEIGHT)
@@ -2302,9 +2307,9 @@ def new_game():
     equipment_component.equip()
     
     #create a scroll of magic mapping
-    #item_component = Item(stacks=True, count=1, use_function=cast_magicmap, pickup_sound=SFX_SCROLLPICKUP, use_sound=None)
-    #item = Object(0, 0, '#', 'Scroll of Magic Map', libtcod.light_yellow, item=item_component)
-    #inventory.append(item)
+    item_component = Item(stacks=True, count=1, use_function=cast_magicmap, pickup_sound=SFX_SCROLLPICKUP, use_sound=None)
+    item = Object(0, 0, '#', 'Scroll of Magic Map', libtcod.light_yellow, item=item_component)
+    inventory.append(item)
     
 def next_level():
     Play_BGSFX(SFX_Stairs)
