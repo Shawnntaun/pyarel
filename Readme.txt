@@ -35,15 +35,16 @@ Yb,_,dP       `8b,          88       Yb, `YbadP' ,d8b,_
     4-Directional movement using arrow keys
     
     [c] Close Doors
-        press [c] and then a directional key (bug; directional prompt will not show until after a direction is chosen)
-    
+        press [c] and then a directional key
+    [f] Fire Ranged Weapon
+        Must have the ranged weapon equipped, and have the appropriate ammo type in the inventory.
     [i] Inventory
         press [i] to open your inventory
             press [i] or [esc] to close the inventory
             press a letter key next to an item to use that item
     
     [k] Kick
-        press [k] and then a directional key  (bug; directional prompt will not show until after a direction is chosen)
+        press [k] and then a directional key
         
     [s] Stats
         press [s] to open your stats menu
@@ -53,9 +54,7 @@ Yb,_,dP       `8b,          88       Yb, `YbadP' ,d8b,_
     * Known Issues *
     ****************
     
-    Render issues with blood and close/kick directional prompts.
-    
-    Gold piles not always re-stacking correctly when thrown
+    Occasional issues with item stacking order (try kicking things out of piles)
     
     **************
     * Change log *

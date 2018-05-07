@@ -70,6 +70,7 @@ Opt_BGM_Sound = 0.75
  
 BGM_TITLEMUSIC = 'audio/bgm/titlemusic.mp3'
 BGM_CAVEMUSIC = 'audio/bgm/puzzles.mp3'
+BGM_DEATHMUSIC = 'audio/bgm/deathmusic.mp3'
 
 SFX_LEVELUP = 'audio/sfx/SFXLevelUp.wav'
 
@@ -96,11 +97,13 @@ SFX_POTIONPICKUP = 'audio/sfx/PICKUPHealthPot.wav'
 SFX_SCROLLPICKUP = 'audio/sfx/PICKUPScroll.wav'
 
 SFX_POTIONUSE = 'audio/sfx/USEHealthPot.wav'
+SFX_OILUSE = 'audio/sfx/USEOilRefill.wav'
 SFX_MAGICMAPUSE = 'audio/sfx/USEMagicMap.wav'
 
 SFX_DOOR = 'audio/sfx/USEDoor.wav'
 SFX_DOORSHAKE = 'audio/sfx/SFXDoorShake.wav'
 SFX_DOORBREAK = 'audio/sfx/SFXBoxBreak.wav'
+SFX_DOORCLOSE = 'audio/sfx/SFXDoorClose.wav'
 SFX_Stairs = 'audio/sfx/SFXStairs.wav'
  
 color_dark_wall = libtcod.black
@@ -178,8 +181,10 @@ class Object:
     def move(self, dx, dy):
         #move by the given amount, if the destination is not blocked
         if not is_blocked(self.x + dx, self.y + dy):
+            self.clear()
             self.x += dx
             self.y += dy
+            self.draw()
             
     def move_towards(self, target_x, target_y):
         #vector from this object to the target, and distance
@@ -217,9 +222,15 @@ class Object:
                         n = libtcod.random_get_int(0, 1, 4)
                         if n >= 2: #3.4 chance to try to open the door
                                 
-                            chance_helper = 0 #libtcod.random_get_int(0, 1, 3)
-                            chance_break_door = libtcod.random_get_int(0, 1, 20) + self.fighter.modifier(self.fighter.strength) + chance_helper
-                            bd_check = 18
+                            chance_break_door = 0
+                            for diceroll in range(1, 4):
+                                chance_break_door = chance_break_door + libtcod.random_get_int(0, 1, 6) 
+                                print str(chance_break_door)
+                            
+                            chance_break_door = chance_break_door + self.fighter.modifier(self.fighter.strength)
+                            print str(chance_break_door)
+                                
+                            bd_check = 14
                             if chance_break_door >= bd_check:
                                 for obj in objects:
                                     if obj.x == self.x+dx and obj.y == self.y + dy and obj.name == "closed door":
@@ -230,7 +241,7 @@ class Object:
                                         if libtcod.map_is_in_fov(fov_map, self.x+dx, self.y+dy):
                                             message("The door crashes open!", libtcod.light_orange)
                                             Play_BGSFX(SFX_DOORBREAK)
-                                        map_sound(obj.x, obj.y, 1)
+                                        map_sound(obj.x, obj.y, 15)
                                         fov_recompute = True
                                         initialize_fov()
                                         
@@ -243,6 +254,13 @@ class Object:
             
             if map[self.x+dx][self.y+dy].block_sight == False and open: #you can move there
                 self.move(dx, dy) #move
+                
+                
+            chance = libtcod.random_get_int(0, 1, 2)
+            if chance == 1:
+                monster_pickup(self, self.x, self.y)    
+                    
+        
     
     def move_astar(self, target):
         #Create a FOV map that has the dimensions of the map
@@ -314,6 +332,7 @@ class Object:
         #erase the character that represents this object
         libtcod.console_put_char(con, self.x, self.y, ' ', libtcod.BKGND_NONE)
 
+        
 def DijkHeat(cmap, infov=False, limit=9):
     #renders a heat map for a provided dijkstra(cmap)
     # if inFoV = true it will render the map within the players fov_map
@@ -356,23 +375,23 @@ def DijkHeat(cmap, infov=False, limit=9):
             else:
                 color = libtcod.white
 
-            render = False
-            if infov:
-                if libtcod.map_is_in_fov(fov_map, x, y):
-                    render = True
-            else:
-                if libtcod.map_is_in_fov(fov_map, x, y):
-                    render = False
+            if not v == 0:
+                render = False
+                if infov:
+                    if libtcod.map_is_in_fov(fov_map, x, y):
+                        render = True
                 else:
-                    render = True
-                
-            if render:
-                if map[x][y].block_sight and map[x][y].is_door == False:
-                    pass
-                elif v < limit:
-                    libtcod.console_set_char_background(0, x, y, color, libtcod.BKGND_SCREEN)
-                
-        
+                    if libtcod.map_is_in_fov(fov_map, x, y):
+                        render = False
+                    else:
+                        render = True
+                    
+                if render:
+                    if map[x][y].block_sight and map[x][y].is_door == False:
+                        pass
+                    elif v < limit:
+                        libtcod.console_set_char_background(0, x, y, color, libtcod.BKGND_SCREEN)
+                           
 class DijkstraMap:
 
     # X, Y Transitions to the 8 neighboring cells
@@ -520,19 +539,16 @@ class DijkstraMap:
     def cell_at(self, x, y):
         return self.tiles[x][y]
         
+        
 class Fighter:
     #combat-related properties and methods (monster, player, NPC).
-    def __init__(self, hp, ac, strength, dexterity, constitution, intelligence, wisdom, charisma, luck, damage, speed, xp,
+    def __init__(self, hp, ac, strength, dexterity, luck, damage, speed, xp,
                 atk_sound=None, hit_sound=None, death_sound=None, death_function=None):
         self.base_max_hp = hp
         self.hp = hp
         self.base_ac = ac
         self.base_strength = strength
         self.base_dexterity = dexterity
-        self.base_constitution = constitution
-        self.base_intelligence = intelligence
-        self.base_wisdom = wisdom
-        self.base_charisma = charisma
         self.base_luck = luck
         self.base_damage = damage
         self.xp = xp
@@ -542,6 +558,7 @@ class Fighter:
         self.hit_sound = hit_sound
         self.death_sound = death_sound
         self.death_function = death_function
+        self.loot = [] #stores loot for monster drops
  
     @property
     def strength(self):  #return actual strength, by summing up the bonuses from all equipped items
@@ -553,26 +570,6 @@ class Fighter:
         bonus = sum(equipment.dexterity_bonus for equipment in get_all_equipped(self.owner))
         return self.base_dexterity + bonus
 
-    @property
-    def constitution(self):
-        bonus = sum(equipment.constitution_bonus for equipment in get_all_equipped(self.owner))
-        return self.base_constitution + bonus
-    
-    @property
-    def intelligence(self):
-        bonus = sum(equipment.intelligence_bonus for equipment in get_all_equipped(self.owner))
-        return self.base_intelligence + bonus
-        
-    @property
-    def wisdom(self):
-        bonus = sum(equipment.wisdom_bonus for equipment in get_all_equipped(self.owner))
-        return self.base_wisdom + bonus
-    
-    @property
-    def charisma(self):
-        bonus = sum(equipment.charisma_bonus for equipment in get_all_equipped(self.owner))
-        return self.base_charisma + bonus
-    
     @property
     def luck(self):
         bonus = sum(equipment.luck_bonus for equipment in get_all_equipped(self.owner))
@@ -604,14 +601,17 @@ class Fighter:
          
     def attack(self, target):
         #a simple formula for attack damage
-        bdamage = self.damage - target.fighter.ac
-        
-        damage = libtcod.random_get_int(0, 1+self.modifier(self.strength), bdamage+self.modifier(self.strength))
- 
+        print ""
+        print self.owner.name
+        print " my dmg : " + str(self.damage) #self.damage includes str mod
+        # dgm = ((# from 1 to my dmg - target ac)+1)
+        damage = libtcod.random_get_int(0, self.damage/2, (self.damage - target.fighter.ac)+1)
+        print "dmg : " + str(damage)
+        print ""
         if damage > 0:
             
             if target == player:
-                message(self.owner.name + " hits you!", libtcod.grey)
+                message(self.owner.name + " hits you!", libtcod.lightest_red)
                 if self.atk_sound:
                     Play_PlayerCombat(self.atk_sound)
             else:
@@ -695,7 +695,6 @@ class Fighter:
             self.hp = self.max_hp
  
 
-
 class BasicMonster:
     #AI for a basic monster.
     def take_turn(self):
@@ -727,7 +726,9 @@ class ConfusedMonster:
         else:  #restore the previous AI (this one will be deleted because it's not referenced anymore)
             self.owner.ai = self.old_ai
             message('The ' + self.owner.name + ' is no longer confused!', libtcod.red)
- 
+
+
+            
 class Item:
     #an item that can be picked up and/or used.
    
@@ -741,8 +742,12 @@ class Item:
     def pick_up(self):
         
             
-        if self.owner.name == "open door" or self.owner.name == "closed door":
-            message("You can not pick up a door.",libtcod.white)
+        if self.owner.name == 'stairs':
+            message("What? How would you even... no, you can't pick up the stairs.", libtcod.gray)
+        elif self.owner.name == 'closed door' or self.owner.name == 'open door':
+            message("There's no way that door is fitting in your pack.", libtcod.gray)
+        elif self.owner == player:
+            pass
         else:
             #add to the player's inventory and remove from the map
             if self.stacks:
@@ -756,7 +761,12 @@ class Item:
                             s.set_volume(Opt_SFX_Sound)
                             CHANNEL_ITEMSFX.play(s)
 
-                        message('You picked up ' +  self.owner.name + "! (x" + str(self.count) + ")", libtcod.green)
+                        strmessage = "You picked up " + self.owner.name + "!"
+                        if self.count > 1:
+                            strmessage = strmessage +  " (x" + str(self.count) + ")"
+   
+                            
+                        message(strmessage, libtcod.green)
                         
                         #add to inventory
                         itm.item.count = itm.item.count + self.count
@@ -777,8 +787,11 @@ class Item:
                     #add to inventory
                     inventory.append(self.owner)
                     objects.remove(self.owner)
-                    message('You picked up ' +  self.owner.name + "! (x" + str(self.count) + ")", libtcod.green)
-                    
+                    strmessage = "You picked up " + self.owner.name + "!"
+                    if self.count > 1:
+                        strmessage = strmessage + " (x" + str(self.count) + ")"
+                    message(strmessage, libtcod.green)
+                
                     #special case: automatically equip, if the corresponding equipment slot is unused
                     equipment = self.owner.equipment
                     if equipment and get_equipped_in_slot(equipment.slot) is None:
@@ -831,21 +844,17 @@ class Item:
  
 class Equipment:
     #an object that can be equipped, yielding bonuses. automatically adds the Item component.
-    def __init__(self, slot, strength_bonus=0, dexterity_bonus=0, constitution_bonus=0, intelligence_bonus=0,
-                wisdom_bonus=0, charisma_bonus=0, damage_bonus=0, luck_bonus=0, speed_bonus=0, tohit_bonus=0, ac_bonus=0, max_hp_bonus=0):
+    def __init__(self, slot, strength_bonus=0, dexterity_bonus=0, luck_bonus=0, speed_bonus=0, tohit_bonus=0, damage_bonus=0, ac_bonus=0, max_hp_bonus=0, shotrange=None, range_damage=0):
         self.strength_bonus = strength_bonus
         self.dexterity_bonus = dexterity_bonus
-        self.constitution_bonus = constitution_bonus
-        self.intelligence_bonus = intelligence_bonus
-        self.wisdom_bonus = wisdom_bonus
-        self.charisma_bonus = charisma_bonus
-        self.damage_bonus = damage_bonus
         self.luck_bonus = luck_bonus
         self.speed_bonus = speed_bonus
         self.tohit_bonus = tohit_bonus
+        self.damage_bonus = damage_bonus
         self.ac_bonus = ac_bonus
         self.max_hp_bonus = max_hp_bonus
- 
+        self.shotrange = shotrange
+        self.range_damage = range_damage
         self.slot = slot
         self.is_equipped = False
  
@@ -870,15 +879,19 @@ class Equipment:
         if not self.is_equipped: return
         self.is_equipped = False
         message('Dequipped ' + self.owner.name + ' from ' + self.slot + '.', libtcod.light_yellow)
- 
-def map_sound(sourcex, sourcey, intensity=1): 
+        
+def map_sound(sourcex, sourcey, intensity=15): 
 
     sound_dijkstra.clear_goals()
-    sound_dijkstra._clear_map(15)
+    sound_dijkstra._clear_map(intensity)
     sound_dijkstra.add_goal(sourcex, sourcey)
-    sound_dijkstra.recalculate_single(sourcex, sourcey, 15, True)
+    sound_dijkstra.recalculate_single(sourcex, sourcey, intensity, True)
     
-
+    #invert the whole map
+    for y in range(MAP_HEIGHT):
+        for x in range(MAP_WIDTH):
+            sound_dijkstra.tiles[x][y] = intensity - sound_dijkstra.tiles[x][y]
+    
 def decay_map(map, decayrate = 1):
     
     if map == None:
@@ -890,23 +903,210 @@ def decay_map(map, decayrate = 1):
         for y in range(MAP_HEIGHT): 
             for x in range(MAP_WIDTH):
                 changes = False
-                if map.tiles[x][y] < 15:
-                    map.tiles[x][y] = map.tiles[x][y] + decayrate
-                    if map.tiles[x][y] > 15:
-                        map.tiles[x][y] = 15
+                if map.tiles[x][y] > 0:
+                    map.tiles[x][y] = map.tiles[x][y] - decayrate
+                    if map.tiles[x][y] < 0:
+                        map.tiles[x][y] = 0
                         changes = True
                         
+def choose_ranged():
+    
+    wepchoice = None
+       
+    for equipment in get_all_equipped(player):
+        if equipment.shotrange:
+            wepchoice = equipment.owner.name
+            break
 
-def Burn_Torch():
+    if wepchoice == None:
+        return 'nowep'
+    else:
+        if wepchoice == 'Bow':
+            #bow stats/damage
+            fire_ranged(shotrange=5, damage=5, ammo='Arrow')
+        
+    
+
+def fire_ranged(shotrange=5, damage=1, ammo=None):
+    #fire ranged weapon
+    global key, mouse
+    
+    (dx, dy) = (None, None)
+        
+    if ammo:
+        shoot = False
+        for itm in inventory:
+            if shoot == True:
+                break
+                
+            if itm.name == ammo:
+                itm.item.count = itm.item.count - 1
+                if itm.item.count <= 0:
+                    inventory.remove(itm)
+                shoot = True 
+        
+    if shoot == False:
+        #no ammo
+        message("You do not have the needed ammo to shoot!", libtcod.light_red)
+        return 'cancelled'
+    
+    while True:
+        #render the screen. this erases the inventory and shows the names of objects under the mouse.
+        libtcod.console_flush()
+        libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS | libtcod.EVENT_MOUSE, key, mouse)
+        render_all()
+        context_menu("Fire in what direction? ([ESC] to cancel.)", libtcod.light_azure, libtcod.black)
+ 
+        choice = key
+        (dx, dy) = (0, 0)
+        (lastx, lasty) = (0, 0)
+        
+        #movement keys
+        if choice.vk == libtcod.KEY_UP or choice.vk == libtcod.KEY_KP8:
+            (dx, dy) = (0, -1)  
+            break
+            
+        elif choice.vk == libtcod.KEY_DOWN or choice.vk == libtcod.KEY_KP2:
+            (dx, dy) = (0, 1)    
+            
+        elif choice.vk == libtcod.KEY_LEFT or choice.vk == libtcod.KEY_KP4:
+            (dx, dy) = (-1, 0)         
+            
+        elif choice.vk == libtcod.KEY_RIGHT or choice.vk == libtcod.KEY_KP6:
+            (dx, dy) = (1, 0)         
+            
+        elif choice.vk == libtcod.KEY_HOME or choice.vk == libtcod.KEY_KP7:
+            (dx, dy) = (-1, -1)         
+            
+        elif choice.vk == libtcod.KEY_PAGEUP or choice.vk == libtcod.KEY_KP9:
+            (dx, dy) = (1, -1)         
+            
+        elif choice.vk == libtcod.KEY_END or choice.vk == libtcod.KEY_KP1:
+            (dx, dy) = (-1, 1)         
+            
+        elif choice.vk == libtcod.KEY_PAGEDOWN or choice.vk == libtcod.KEY_KP3:
+            (dx, dy) = (1, 1)         
+            
+        if not (dx, dy) == (0, 0):
+            break
+            
+        elif choice.vk == libtcod.KEY_ESCAPE:
+            return 'cancelled'
+            break
+                     
+    if not (dx, dy) == (None,  None):
+        target = None
+        #try to find a target
+        targetx = player.x + (shotrange * dx)
+        targety = player.y + (shotrange * dy)
+            
+        if dx == 0:
+            # North/South
+            for y in range(player.y, targety, dy):               
+                if target:
+                    break
+                    
+                if map[player.x][y].block_sight:
+                    break    
+                    
+                for obj in objects:
+                    if obj == player:
+                        pass
+                    elif obj.fighter:
+                       if obj.x == player.x and obj.y == y:
+                            #found a fighter target
+                            target = obj
+                            break
+                            
+                #keep track of last position to drop ammo            
+                (lastx, lasty) = (player.x, y) 
+                
+        elif dy == 0:
+            # East/West
+            for x in range(player.x, targetx, dx):
+                if target:
+                    break
+                    
+                if map[x][player.y].block_sight:
+                    break
+                    
+                for obj in objects:
+                    if obj == player:
+                        pass
+                    elif obj.fighter:
+                       if obj.x == x and obj.y == player.y:
+                            #found a fighter target
+                            target = obj
+                            break
+                            
+                #keep track of last position to drop ammo            
+                (lastx, lasty) = (x, player.y)            
+                
+        else:       
+            #Diag
+            
+            for i in range(shotrange):
+                if target:
+                    break
+                    
+                tx = player.x + (dx*i)
+                ty = player.y + (dy*i)
+                
+                if map[tx][ty].block_sight:
+                    break
+                
+                for obj in objects:
+                    if obj == player:
+                        pass
+                    elif obj.fighter:
+                       if obj.x == tx and obj.y == ty:
+                            #found a fighter target
+                            target = obj
+                            break
+                            
+                #keep track of last position to drop ammo            
+                (lastx, lasty) = (tx, ty)               
+
+        if target:  
+            #shoot the target
+            if libtcod.map_is_in_fov(fov_map, target.x, target.y):
+                message("You shot the " + target.name + "!", libtcod.gray)
+            else:
+                message("You shot something!", libtcod.gray)
+            target.fighter.take_damage(damage)
+            
+        else:
+            #shoot into the abyss
+            #drop ammo at end of range for pickup
+        
+    
+            added = False
+            for obj in objects:
+                if obj.name == ammo and obj.x == lastx and obj.y == lasty:
+                    #add to existing ammo pile
+                    obj.item.count = obj.item.count + 1
+                    obj.send_to_back
+                    added = True
+                    
+            if not added:
+                #create new arrow
+                item_component = Item(stacks=True, count=1, use_function=None, pickup_sound=None, use_sound=None)
+                item = Object(lastx, lasty, '/', 'Arrow', libtcod.sepia, item=item_component)
+                objects.append(item)
+                            
+
+def update_torch():
     global TORCH_RADIUS, fov_recompute
        
     current = TORCH_RADIUS
-    TORCH_RADIUS = int((player.oil) % (player.max_oil_level)/10) #oil formula here
+    if (player.oil/player.max_oil_level) == 1:
+        TORCH_RADIUS = 10
+    else:
+        TORCH_RADIUS = int((player.oil) % (player.max_oil_level)/10) #oil formula here
     if TORCH_RADIUS < 2:
         TORCH_RADIUS = 2
     if not current == TORCH_RADIUS:
         fov_recompute = True
-    
     
 def in_map_range(x, y):
     if 0 < x < MAP_WIDTH and 0 < y < MAP_HEIGHT:
@@ -921,9 +1121,7 @@ def tile_blocked(x, y):
             else:
                 blocked = True
     return blocked
-    
-    
-    
+
     
 def get_equipped_in_slot(slot):  #returns the equipment in a slot, or None if it's empty
     for obj in inventory:
@@ -1262,10 +1460,14 @@ def make_door(x, y):
                 
                 other_doors = False
                 #check for nearby doors
-                for tx in range(-2, 2):
-                    for ty in range(-2, 2):
-                        if in_map_range(x+tx, y+ty):
-                            if map[x+tx][y+ty].is_door:
+                for tx in range(-5, 5):
+                    if in_map_range(x+tx, y):
+                            if map[x+tx][y].is_door:
+                                other_doors = True
+                
+                    for ty in range(-5, 5):
+                        if in_map_range(x, y+ty):
+                            if map[x][y+ty].is_door:
                                 other_doors = True
                 
                 if not other_doors:
@@ -1278,130 +1480,187 @@ def make_door(x, y):
                 
                     map[x][y].block_sight = True
                     map[x][y].is_door = True
-                    map[x][y].blocked = True
-            
-    #for obj in objects:
-    #    if obj.name == "closed door":
-    #        map[obj.x][obj.y].block_sight = True
-    #        map[obj.x][obj.y].is_door = True
-    #        map[obj.x][obj.y].blocked = True
+                    map[x][y].blocked = True         
 
 def try_kick():
-    global blood_map
+    global key, mouse, fov_recompute
     
-    message('Kick in what direction?', libtcod.lighter_blue)
-    choice = libtcod.console_wait_for_keypress(True)
-    #movement keys
     (dx, dy) = (None, None)
-    if choice.vk == libtcod.KEY_UP or choice.vk == libtcod.KEY_KP8:
-        (dx, dy) = (0, -1)
         
-    elif choice.vk == libtcod.KEY_DOWN or choice.vk == libtcod.KEY_KP2:
-        (dx, dy) = (0, 1)
+    while True:
+        #render the screen. this erases the inventory and shows the names of objects under the mouse.
+        libtcod.console_flush()
+        libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS | libtcod.EVENT_MOUSE, key, mouse)
+        render_all()
+        context_menu("Kick in what direction? ([ESC] to cancel.)", libtcod.light_azure, libtcod.black)
+ 
+        choice = key
         
-    elif choice.vk == libtcod.KEY_LEFT or choice.vk == libtcod.KEY_KP4:
-        (dx, dy) = (-1, 0)
-        
-    elif choice.vk == libtcod.KEY_RIGHT or choice.vk == libtcod.KEY_KP6:
-        (dx, dy) = (1, 0)
-        
-    elif choice.vk == libtcod.KEY_HOME or choice.vk == libtcod.KEY_KP7:
-        (dx, dy) = (-1, -1)
-        
-    elif choice.vk == libtcod.KEY_PAGEUP or choice.vk == libtcod.KEY_KP9:
-        (dx, dy) = (1, -1)
-        
-    elif choice.vk == libtcod.KEY_END or choice.vk == libtcod.KEY_KP1:
-        (dx, dy) = (-1, 1)
-        
-    elif choice.vk == libtcod.KEY_PAGEDOWN or choice.vk == libtcod.KEY_KP3:
-        (dx, dy) = (1, 1)
-    else:
-        (dx, dy) = (None, None)
-        
-        
+        #movement keys
+        if choice.vk == libtcod.KEY_UP or choice.vk == libtcod.KEY_KP8:
+            (dx, dy) = (0, -1)  
+            break
+            
+        elif choice.vk == libtcod.KEY_DOWN or choice.vk == libtcod.KEY_KP2:
+            (dx, dy) = (0, 1)    
+            
+            
+        elif choice.vk == libtcod.KEY_LEFT or choice.vk == libtcod.KEY_KP4:
+            (dx, dy) = (-1, 0)         
+            
+        elif choice.vk == libtcod.KEY_RIGHT or choice.vk == libtcod.KEY_KP6:
+            (dx, dy) = (1, 0)         
+            
+        elif choice.vk == libtcod.KEY_HOME or choice.vk == libtcod.KEY_KP7:
+            (dx, dy) = (-1, -1)         
+            
+        elif choice.vk == libtcod.KEY_PAGEUP or choice.vk == libtcod.KEY_KP9:
+            (dx, dy) = (1, -1)         
+            
+        elif choice.vk == libtcod.KEY_END or choice.vk == libtcod.KEY_KP1:
+            (dx, dy) = (-1, 1)         
+            
+        elif choice.vk == libtcod.KEY_PAGEDOWN or choice.vk == libtcod.KEY_KP3:
+            (dx, dy) = (1, 1)         
+            
+        if not (dx, dy) == (None, None):
+            break
+        elif choice.vk == libtcod.KEY_ESCAPE:
+            return 'cancelled'
+            break
+                     
     if not (dx, dy) == (None,  None):    
         found = False
         for obj in objects:
-            if found == False:
-                if obj.x == player.x+dx and obj.y == player.y+dy:
-                    found = True
-                    if obj.name == 'closed door' or obj.name == 'open door':
-                        #add kicking doors here
-                        message('You kick the door, but it does not budge.', libtcod.gray)
+            if found:
+                break
+                
+            if obj.x == player.x+dx and obj.y == player.y+dy:
+                found = True
+                
+                if obj.name == 'closed door':
+                    #try to kick down a closed door
+                    chance_break_door = 0
+                    for diceroll in range(1, 4):
+                        chance_break_door = chance_break_door + libtcod.random_get_int(0, 1, 6) 
+                        print str(chance_break_door)
+                    
+                    chance_break_door = chance_break_door + player.fighter.modifier(player.fighter.strength)
+                    print str(chance_break_door)
                         
-                    elif obj.name == 'stairs':
-                            message('You kick the stairs and manage to mess up your toe pretty badly.', libtcod.gray)
-                            player.fighter.take_damage(3)
-                            
-                    else:
-                        if (map[obj.x+dx][obj.y+dy].block_sight and map[obj.x+dx][obj.y+dy].is_door == False) or map[obj.x+dx][obj.y+dy].blocked:
-                            message('You kick the ' + obj.name +', but it does not budge.', libtcod.gray)
-                            
-                        elif obj.fighter:
-                                message('The ' + obj.name + ' dodges your kick.', libtcod.gray)
+                    bd_check = 14
+                    
+                    if chance_break_door >= bd_check:  
+                        #kick chance successful
+                        obj.name = 'open door'
+                        obj.char = '-'
+                        map[obj.x][obj.y].block_sight = False
+                        map[obj.x][obj.y].blocked = False
+                        message("The door crashes open!", libtcod.light_orange)
+                        Play_BGSFX(SFX_DOORBREAK)
+                        map_sound(obj.x, obj.y, 15)
+                        fov_recompute = True
+                        initialize_fov()
                                 
-                        elif obj.char == '%':
-                            #kick that corpse
-                            blood_map[obj.x+dx][obj.y+dy] = 1
-                            obj.x = obj.x + dx
-                            obj.y = obj.y +dy
-                            message('You kick the ' + obj.name + '.', libtcod.gray)
-                        else:
-                            obj.x = obj.x + dx
-                            obj.y = obj.y +dy
-                            message('You kick the ' + obj.name + '.', libtcod.gray)
+                    else:                  
+                        #print "knock knock"
+                        message("The door shakes but is still closed.",libtcod.white)
+                        Play_BGSFX(SFX_DOORSHAKE)
+                            
+                elif obj.name == 'open door':
+                    #goof around with open door.. returns cancelled to not take up turn
+                    message("Your foot flies awkwardly through the open doorway.")
+                    return 'cancelled'
+                    
+                elif obj.name == 'stairs':
+                        message('You kick the stairs and manage to mess up your toe pretty badly.', libtcod.gray)
+                        player.fighter.take_damage(3)
+                        
+                else:
+                    if (map[obj.x+dx][obj.y+dy].block_sight and map[obj.x+dx][obj.y+dy].is_door == False) or map[obj.x+dx][obj.y+dy].blocked:
+                        message('You kick the ' + obj.name +', but it does not budge.', libtcod.gray)
+                        
+                    elif obj.fighter:
+                            message('The ' + obj.name + ' dodges your kick.', libtcod.gray)
+                                                  
+                    else:
+                        obj.x = obj.x + dx
+                        obj.y = obj.y +dy
+                        message('You kick the ' + obj.name + '.', libtcod.gray)
+                        
+                        if obj.char == '%':
+                            blood_map[obj.x][obj.y] = 1
                     
         if not found:
-            message('Nothing in that direction to kick.', libtcod.white)
-            
+            message('Nothing in that direction to kick.', libtcod.light_gray)
+            return 'cancelled'
+        else:
+            #update the screen
+            fov_recompute = True
+            initialize_fov()
+            render_all()
+    
             
 def try_close_door():
-    message('Close door in what direction?', libtcod.lighter_blue)
-    choice = libtcod.console_wait_for_keypress(True)
-    #movement keys
-    (dx, dy) = (None, None)
-    if choice.vk == libtcod.KEY_UP or choice.vk == libtcod.KEY_KP8:
-        (dx, dy) = (0, -1)
-        
-    elif choice.vk == libtcod.KEY_DOWN or choice.vk == libtcod.KEY_KP2:
-        (dx, dy) = (0, 1)
-        
-    elif choice.vk == libtcod.KEY_LEFT or choice.vk == libtcod.KEY_KP4:
-        (dx, dy) = (-1, 0)
-        
-    elif choice.vk == libtcod.KEY_RIGHT or choice.vk == libtcod.KEY_KP6:
-        (dx, dy) = (1, 0)
-        
-    elif choice.vk == libtcod.KEY_HOME or choice.vk == libtcod.KEY_KP7:
-        (dx, dy) = (-1, -1)
-        
-    elif choice.vk == libtcod.KEY_PAGEUP or choice.vk == libtcod.KEY_KP9:
-        (dx, dy) = (1, -1)
-        
-    elif choice.vk == libtcod.KEY_END or choice.vk == libtcod.KEY_KP1:
-        (dx, dy) = (-1, 1)
-        
-    elif choice.vk == libtcod.KEY_PAGEDOWN or choice.vk == libtcod.KEY_KP3:
-        (dx, dy) = (1, 1)
-    else:
-        (dx, dy) = (None, None)
+    global key, mouse
     
-    if (dx, dy) == (None, None):
-        pass #cancel
+    (dx, dy) = (None, None)
         
-    elif map[player.x+dx][player.y+dy].is_door:
-        for obj in objects:
-            if obj.x == player.x+dx and obj.y == player.y+dy and obj.name == 'open door':
-                if is_blocked(obj.x, obj.y):
-                    message('Something is blocking the door.',libtcod.lightest_red)
-                else:
-                    obj.item.use_function(player.x+dx, player.y+dy)
-                    message('You swing the door shut.', libtcod.gray)
-                    map_sound(player.x+dx, player.y+dy, intensity=15)
-                
-    else:
-        message('No door in that direction to close.', libtcod.white)
+    while True:
+        #render the screen. this erases the inventory and shows the names of objects under the mouse.
+        libtcod.console_flush()
+        libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS | libtcod.EVENT_MOUSE, key, mouse)
+        render_all()
+        context_menu("Close door in what direction? ([ESC] to cancel.)", libtcod.light_azure, libtcod.black)
+ 
+        choice = key
+        #movement keys
+        (dx, dy) = (None, None)
+        if choice.vk == libtcod.KEY_UP or choice.vk == libtcod.KEY_KP8:
+            (dx, dy) = (0, -1)
+            
+        elif choice.vk == libtcod.KEY_DOWN or choice.vk == libtcod.KEY_KP2:
+            (dx, dy) = (0, 1)
+            
+        elif choice.vk == libtcod.KEY_LEFT or choice.vk == libtcod.KEY_KP4:
+            (dx, dy) = (-1, 0)
+            
+        elif choice.vk == libtcod.KEY_RIGHT or choice.vk == libtcod.KEY_KP6:
+            (dx, dy) = (1, 0)
+            
+        elif choice.vk == libtcod.KEY_HOME or choice.vk == libtcod.KEY_KP7:
+            (dx, dy) = (-1, -1)
+            
+        elif choice.vk == libtcod.KEY_PAGEUP or choice.vk == libtcod.KEY_KP9:
+            (dx, dy) = (1, -1)
+            
+        elif choice.vk == libtcod.KEY_END or choice.vk == libtcod.KEY_KP1:
+            (dx, dy) = (-1, 1)
+            
+        elif choice.vk == libtcod.KEY_PAGEDOWN or choice.vk == libtcod.KEY_KP3:
+            (dx, dy) = (1, 1)
+        
+        if not (dx, dy) == (None, None):
+            break
+        elif choice == libtcod.KEY_ESCAPE:
+            return 'cancelled'
+            break
+        
+    if not (dx, dy) == (None, None):
+        if map[player.x+dx][player.y+dy].is_door:
+            for obj in objects:
+                if obj.x == player.x+dx and obj.y == player.y+dy and obj.name == 'open door':
+                    if is_blocked(obj.x, obj.y):
+                        message('Something is blocking the door.',libtcod.lightest_red)
+                    else:
+                        obj.item.use_function(player.x+dx, player.y+dy)
+                        message('You swing the door shut.', libtcod.gray)
+                        Play_BGSFX(SFX_DOORCLOSE)
+                        map_sound(player.x+dx, player.y+dy, intensity=7)
+                    
+        else:
+            message('No door in that direction to close.', libtcod.white)
+            return 'cancelled'
             
 
 
@@ -1475,25 +1734,27 @@ def from_dungeon_level(table):
  
 def place_objects(room):
     #this is where we decide the chance of each monster or item appearing.
- 
+
     #maximum number of monsters per room
     max_monsters = from_dungeon_level([[2, 1], [3, 4], [5, 6]])
  
     #chance of each monster
     monster_chances = {}
-    monster_chances['gerblin'] = 80  #gerblin always shows up, even if all other monsters have 0 chance
-    monster_chances['gnoll pl'] = from_dungeon_level([[15, 3], [30, 5], [60, 7]])
-    monster_chances['gnoll foy'] = from_dungeon_level([[1, 1], [5, 3], [10,5]])
+    monster_chances['gerblin'] =    80  #gerblin always shows up, even if all other monsters have 0 chance
+    monster_chances['gnoll pl'] =   from_dungeon_level([[15, 3], [30, 5], [60, 7]])
+    monster_chances['gnoll foy'] =  from_dungeon_level([[1, 1], [5, 3], [10,5]])
  
     #maximum number of items per room
     max_items = from_dungeon_level([[1, 1], [2, 4]])
  
     #chance of each item (by default they have a chance of 0 at level 1, which then goes up)
     item_chances = {}
-    item_chances['gold'] = 5 #always shows up  
-    item_chances['oil'] = 35 #always shows up
-    item_chances['heal'] = 20  #healing potion always shows up, even if all other items have 0 chance
-    item_chances['magic map'] = 2
+    item_chances['bow'] =       2
+    item_chances['arrow'] =     5
+    item_chances['gold'] =      5 #always shows up  
+    item_chances['oil'] =       45 #always shows up
+    item_chances['heal'] =      45  #healing potion always shows up, even if all other items have 0 chance
+    item_chances['magic map'] = 5
     item_chances['lightning'] = from_dungeon_level([[25, 3]])
     item_chances['fireball'] =  from_dungeon_level([[25, 4]])
     item_chances['confuse'] =   from_dungeon_level([[10, 2]])
@@ -1514,8 +1775,7 @@ def place_objects(room):
             choice = random_choice(monster_chances)
             if choice == 'gerblin':
                 #create a gerblin
-                fighter_component = Fighter(hp=7, ac=7, strength=8, dexterity=14, constitution=10, intelligence=10, 
-                                            wisdom=8, charisma=8, damage=15, luck=1, speed=3, xp=50,
+                fighter_component = Fighter(hp=7, ac=7, strength=8, dexterity=14, luck=1, speed=3, xp=50, damage=8, 
                                             atk_sound=SFX_GNOLLATK, hit_sound=SFX_GNOLLHIT, death_sound=SFX_MONSTERDIE,
                                             death_function=monster_death)
                 ai_component = BasicMonster()
@@ -1525,8 +1785,7 @@ def place_objects(room):
  
             elif choice == 'gnoll pl':
                 #create a Gnoll Pack Lord
-                fighter_component = Fighter(hp=49, ac=7, strength=16, dexterity=14, constitution=13, intelligence=8, 
-                                            wisdom=11, charisma=9, damage=15, luck=1, speed=2.8, xp=450, 
+                fighter_component = Fighter(hp=49, ac=7, strength=16, dexterity=14, luck=1, speed=2.8, xp=450, damage=16, 
                                             atk_sound=SFX_GNOLLATK, hit_sound=SFX_GNOLLHIT, death_sound=SFX_MONSTERDIE,
                                             death_function=monster_death)
                 ai_component = BasicMonster()
@@ -1536,14 +1795,23 @@ def place_objects(room):
  
             elif choice == "gnoll foy":
                 #create a 'Gnoll Fang of Yeenoghu'
-                fighter_component = Fighter(hp=65, ac=6, strength=17, dexterity=15, constitution=15, intelligence=10, 
-                                            wisdom=11, charisma=13, damage=20, luck=1, speed=2.5, xp=1100, 
+                fighter_component = Fighter(hp=65, ac=6, strength=17, dexterity=15, luck=1, speed=2.5, xp=1100, damage=20, 
                                             atk_sound=SFX_TROLLATK, hit_sound=SFX_TROLLHIT, death_sound=SFX_MONSTERDIE,
                                             death_function=monster_death)
                 ai_component = BasicMonster()
  
                 monster = Object(x, y, 'g', 'Gnoll; Fang of Yeenoghu', libtcod.red,
                                 blocks=True, fighter=fighter_component, ai=ai_component)            
+            
+            for obj in objects:
+                if obj.x == x and obj.y == y and not obj.fighter:
+                    dx = libtcod.random_get_int(0, -1, 1)
+                    dy = libtcod.random_get_int(0, -1, 1)
+                    while map[x+dx][y+dy].block_sight:
+                        dx = libtcod.random_get_int(0, -1, 1)
+                        dy = libtcod.random_get_int(0, -1, 1)
+                    obj.x = obj.x + dx
+                    obj.y = obj.y + dy
             
             objects.append(monster)
  
@@ -1558,7 +1826,18 @@ def place_objects(room):
         #only place it if the tile is not blocked
         if not is_blocked(x, y):
             choice = random_choice(item_chances)
-            if choice == 'heal':
+            
+            if choice == 'arrow':
+                #create a stack of arrows
+                item_component = Item(stacks=True, count=5, use_function=None, pickup_sound=None, use_sound=None)
+                item = Object(x, y, '/', 'Arrow', libtcod.sepia, item=item_component)
+            
+            elif choice == 'bow':
+                #create a bow
+                equipment_component = Equipment(slot='right hand', shotrange=5, range_damage=10)
+                item = Object(x, y, ']', 'Bow', libtcod.darker_sepia, equipment=equipment_component)
+
+            elif choice == 'heal':
                 #create a healing potion
                 item_component = Item(stacks=False, count=1, use_function=cast_heal, pickup_sound=SFX_POTIONPICKUP, use_sound=SFX_POTIONUSE)
                 item = Object(x, y, '!', 'Healing Potion', libtcod.light_violet, item=item_component)
@@ -1570,7 +1849,7 @@ def place_objects(room):
             
             elif choice == 'oil':
                 #create an oil lamp
-                item_component = Item(stacks=False, count=1, use_function=use_oil, pickup_sound=SFX_POTIONPICKUP, use_sound=None)
+                item_component = Item(stacks=False, count=1, use_function=use_oil, pickup_sound=SFX_POTIONPICKUP, use_sound=SFX_OILUSE)
                 item = Object(x, y, '!', 'Oil Flask', libtcod.light_yellow, item=item_component)
             
             elif choice == 'magic map':
@@ -1605,7 +1884,7 @@ def place_objects(room):
  
             objects.append(item)
             item.send_to_back()  #items appear below other objects
-            item.always_visible = True  #items are visible even out-of-FOV, if in an explored area
+            #item.always_visible = True  #items are visible even out-of-FOV, if in an explored area
  
  
 def render_bar(x, y, total_width, name, value, maximum, bar_color, back_color):
@@ -1650,7 +1929,7 @@ def render_all():
         #recompute FOV if needed (the player moved or something)
         fov_recompute = False
         libtcod.map_compute_fov(fov_map, player.x, player.y, TORCH_RADIUS, FOV_LIGHT_WALLS, FOV_ALGO)
- 
+        
         #go through all tiles, and set their background color according to the FOV
         for y in range(MAP_HEIGHT):
             for x in range(MAP_WIDTH):
@@ -1671,15 +1950,16 @@ def render_all():
                     #since it's visible, explore it
                     map[x][y].explored = True   
                     
-                    if blood_map[x][y] > 0:
-                         libtcod.console_set_char_background(con, x, y, libtcod.darker_red, libtcod.BKGND_SET)
-                    elif blocks:
+                    if blocks:
                         if door:
                             libtcod.console_set_char_background(con, x, y, color_light_ground, libtcod.BKGND_SET )
                         else:
                             libtcod.console_set_char_background(con, x, y, color_light_wall, libtcod.BKGND_SET )
                     else:
-                        libtcod.console_set_char_background(con, x, y, color_light_ground, libtcod.BKGND_SET )
+                        if blood_map[x][y] > 0:
+                            libtcod.console_set_char_background(con, x, y, libtcod.darker_red, libtcod.BKGND_SET)
+                        else:
+                            libtcod.console_set_char_background(con, x, y, color_light_ground, libtcod.BKGND_SET )
                     
     #draw all objects in the list, except the player. we want it to
     #always appear over all other objects! so it's drawn later.
@@ -1688,33 +1968,33 @@ def render_all():
             object.draw()
     player.draw()
     
-    
- 
     #blit the contents of "con" to the root console
     libtcod.console_blit(con, 0, 0, MAP_WIDTH, MAP_HEIGHT, 0, 0, 0)
  
-    #for y in range(MAP_HEIGHT):
-    #                for x in range(MAP_WIDTH):
-    #                    if not map[x][y].blocked:
-    #                        libtcod.console_print_ex(0, x, y, libtcod.BKGND_NONE, libtcod.CENTER, str(player_dijkstra.cell_at(x, y)))
- 
     #draw context hints for the first dungeon level
     if dungeon_level == 1:
-        libtcod.console_set_default_background(0, libtcod.darker_gray)
-        libtcod.console_set_default_foreground(0, libtcod.white)
+        libtcod.console_set_default_background(0, libtcod.light_red)
+        libtcod.console_set_default_foreground(0, libtcod.black)
         
         if player.y >= MAP_HEIGHT/2: #player on bottom half of the screen
             (tx, ty) = (77, 2)
         else: #player on top half of the map
             (tx, ty) = (77, 42)
+            
+        if turn_count < 4:
+            context_menu("Use the Numpad to move (or arrow keys).", libtcod.light_red, libtcod.black)
+            #libtcod.console_print_ex(0, tx, ty, libtcod.BKGND_SET, libtcod.RIGHT, " Use the Num Pad to move (or arrow keys). ")
+        elif turn_count < 8:
+            context_menu("Bump into monsters to attack them.", libtcod.light_red, libtcod.black)
+            #libtcod.console_print_ex(0, tx, ty, libtcod.BKGND_SET, libtcod.RIGHT, " Bump into monsters to attack them. ")
         
         for object in objects:
             if object.x == player.x and object.y == player.y:
                 if object.item:
                     if map[player.x][player.y].is_door == False:
-                        libtcod.console_print_ex(0, tx, ty, libtcod.BKGND_SET, libtcod.RIGHT, " Press [g] to grab items. ")
+                        context_menu("Press [g] to grab an item.", libtcod.light_red, libtcod.black)
                 if object.name == "stairs":
-                        libtcod.console_print_ex(0, tx, ty, libtcod.BKGND_SET, libtcod.RIGHT, " Press [,] to go down the stairs. ")
+                        context_menu("Press [,] to go down the stairs.", libtcod.light_red, libtcod.black)
                         
         myneighbors = [(-1, -1), (0, -1), (1, -1),
                      (-1, 0), (1, 0),
@@ -1725,7 +2005,6 @@ def render_all():
             if map[tdx][tdy].is_door:
                 if map[tdx][tdy].block_sight:
                     libtcod.console_print_ex(0, tx, ty, libtcod.BKGND_SET, libtcod.RIGHT, " Bump into a closed door to open it. ")
-                        
                 else:  
                     libtcod.console_print_ex(0, tx, ty, libtcod.BKGND_SET, libtcod.RIGHT, " Press [c] and then a direction to close an open door. ")
                                 
@@ -1744,10 +2023,11 @@ def render_all():
     #show the player's stats
     render_bar(1, 1, BAR_WIDTH, 'HP', player.fighter.hp, player.fighter.max_hp,
                libtcod.light_red, libtcod.darker_red)
-    render_bar(1, 2, BAR_WIDTH, 'Oil', player.oil, player.max_oil_level,
+    render_bar(1, 3, BAR_WIDTH, 'Oil', player.oil, player.max_oil_level,
                libtcod.light_yellow, libtcod.darker_yellow)
     libtcod.console_set_default_foreground(panel, libtcod.white)
-    libtcod.console_print_ex(panel, 1, 3, libtcod.BKGND_NONE, libtcod.LEFT, 'Dungeon level ' + str(dungeon_level))
+    libtcod.console_print_ex(panel, 1, 5, libtcod.BKGND_NONE, libtcod.LEFT, 'Dungeon level ' + str(dungeon_level))
+    libtcod.console_print_ex(panel, 1, 6, libtcod.BKGND_NONE, libtcod.LEFT, "Turn " + str(turn_count))
  
     #display names of objects under the mouse
     libtcod.console_set_default_foreground(panel, libtcod.light_gray)
@@ -1755,7 +2035,20 @@ def render_all():
  
     #blit the contents of "panel" to the root console
     libtcod.console_blit(panel, 0, 0, SCREEN_WIDTH, PANEL_HEIGHT, 0, 0, PANEL_Y)
- 
+    
+def context_menu(msg, bgcolor=libtcod.white, fgcolor=libtcod.black, tx=None, ty=None, align=libtcod.RIGHT):
+    
+    if tx == None or ty == None:
+        if player.y >= MAP_HEIGHT/2: #player on bottom half of the screen
+            (tx, ty) = (77, 2)
+        else: #player on top half of the map
+            (tx, ty) = (77, 42)
+            
+    libtcod.console_set_default_background(0, bgcolor)
+    libtcod.console_set_default_foreground(0, fgcolor)
+    libtcod.console_print_ex(0, tx, ty, libtcod.BKGND_SET, align, " " + str(msg) + " ")
+    
+    
  
 def message(new_msg, color = libtcod.white):
     #split the message if necessary, among multiple lines
@@ -1771,6 +2064,15 @@ def message(new_msg, color = libtcod.white):
         #add the new line as a tuple, with the text and the color
         game_msgs.append( (line, color) )
  
+def monster_pickup(monster, x, y):
+        for obj in objects:
+            if obj.x == x and obj.y == y:
+                if obj.name == 'stairs' or obj.name == 'open door' or obj.name == 'closed door' or obj.char == '%' or obj.fighter: #dont try to pick up stairs, doors, 
+                    pass                                                                                                            #corpses, other fighters, or your self.
+                else:
+                    #pick dat shit up
+                    monster.fighter.loot.append(obj)
+                    objects.remove(obj) 
  
 def player_move_or_attack(dx, dy):
     global fov_recompute
@@ -1852,8 +2154,10 @@ def menu(header, options, width):
  
     #convert the ASCII code to an index; if it corresponds to an option, return it
     index = key.c - ord('a')
-    if index >= 0 and index < len(options): return index
-    return None
+    if index >= 0 and index < len(options): 
+        return index
+    else:
+        return None
  
 def inventory_menu(header):
     #show a menu with each item of the inventory as an option
@@ -1903,7 +2207,6 @@ def handle_keys():
             
         elif key.vk == libtcod.KEY_KP5:
             player_move_or_attack(0, 0)
-            player_move_or_attack(0, 0)
             
         elif key.vk == libtcod.KEY_HOME or key.vk == libtcod.KEY_KP7:
             player_move_or_attack(-1, -1)
@@ -1916,31 +2219,45 @@ def handle_keys():
             
         elif key.vk == libtcod.KEY_PAGEDOWN or key.vk == libtcod.KEY_KP3:
             player_move_or_attack(1, 1)
-            
-        elif key.vk == libtcod.KEY_KP5:
-            pass  #do nothing ie wait for the monster to come to you
-            
+
                     
         else:
             #test for other keys
             key_char = chr(key.c)
- 
-            if key_char == 'g':
+            
+            if key_char == 'f':
+                tryshot = choose_ranged()
+                if tryshot == 'nowep':
+                    message('You have no ranged weapon equipped.', libtcod.light_gray)
+                elif not tryshot == 'cancelled':
+                    return 'fired-shot'
+
+            elif key_char == 'g':
                 #pick up an item
                 for object in objects:  #look for an item in the player's tile
-                    if object.x == player.x and object.y == player.y and object.item:
-                        object.item.pick_up()
-                        break
+                    if object.x == player.x and object.y == player.y:
+                        if object == player:
+                            pass
+                        else:
+                            if object.item:
+                                object.item.pick_up()
+                                break
+                            else:
+                                message("You can't pick up the " + object.name +'.', libtcod.gray)
+                                break   
  
             elif key_char == 'i':
                 #show the inventory; if an item is selected, use it
                 chosen_item = inventory_menu('Press the key next to an item to use it, or any other to cancel.\n')
                 if chosen_item is not None:
-                    chosen_item.use()
+                    if not chosen_item.use() == 'cancelled':
+                        return 'used-item'
+                    
  
             elif key_char == 'k':
                 #let's kick some stuff
-                try_kick()
+                if not try_kick() == 'cancelled':
+                    return 'kicked'
  
             elif key_char == 'd':
                 #show the inventory; if an item is selected, drop it
@@ -1951,7 +2268,8 @@ def handle_keys():
             elif key_char == 'c':
                 #do stuff
                 #message("Close door in which direction?",libtcod.white)
-                try_close_door()
+                if not try_close_door() == 'cancelled':
+                    return 'closed-door'
                 
             
             elif key_char == 's':
@@ -1996,32 +2314,96 @@ def check_level_up():
                 player.fighter.base_ac += 1
  
 def player_death(player):
-    #the game ended!
-    global game_state
+    global game_state, mouse, key, blood_map, fov_recompute
+    
     message('You died!', libtcod.red)
     game_state = 'dead'
  
     #for added effect, transform the player into a corpse!
     player.fighter.hp = 0
     player.char = '%'
-    player.name = "Corpse of " + player.name
-    player.color = libtcod.dark_red
- 
+    #player.name = "Corpse of " + player.name
+    player.color = libtcod.light_red
+    blood_map[player.x][player.y] = 1
+    fov_recompute = True
+
+    death_menu()
+
+def death_menu():     
+
+    Play_BGM(BGM_DEATHMUSIC)
+
+    while True:
+        #render the screen. this erases the inventory and shows the names of objects under the mouse.
+        libtcod.console_set_default_background(0, libtcod.black)
+        libtcod.console_clear(0)
+        libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS | libtcod.EVENT_MOUSE, key, mouse)
+        libtcod.console_set_default_background(0, libtcod.light_red)
+        libtcod.console_set_default_foreground(0, libtcod.black)
+        for x in range(SCREEN_WIDTH +1):
+            libtcod.console_print_ex(0, x, 1, libtcod.BKGND_SET, libtcod.CENTER, " ")
+        libtcod.console_print_ex(0, SCREEN_WIDTH/2, 1, libtcod.BKGND_SET, libtcod.CENTER, "You Died!")
+        
+        libtcod.console_set_default_foreground(0, libtcod.lightest_red)
+        libtcod.console_print_ex(0, SCREEN_WIDTH/2, 2, libtcod.BKGND_NONE, libtcod.CENTER, "[ESC] to Close")
+        
+        libtcod.console_set_default_foreground(0, libtcod.white)
+        libtcod.console_print_ex(0, SCREEN_WIDTH/2, 4, libtcod.BKGND_NONE, libtcod.CENTER, player.name)
+        
+        libtcod.console_set_default_foreground(0, libtcod.light_yellow)
+        libtcod.console_print_ex(0, SCREEN_WIDTH/2, 5, libtcod.BKGND_NONE, libtcod.CENTER, "Level " + str(player.level))
+        libtcod.console_print_ex(0, SCREEN_WIDTH/2, 6, libtcod.BKGND_NONE, libtcod.CENTER, str(turn_count) + " Turns")
+        
+        libtcod.console_set_default_foreground(0, libtcod.light_azure)
+        libtcod.console_print_ex(0, SCREEN_WIDTH - 6, 6, libtcod.BKGND_NONE, libtcod.RIGHT, "Inventory")
+        libtcod.console_set_default_foreground(0, libtcod.light_gray)
+        i = 8
+        for itm in inventory:
+            libtcod.console_print_ex(0, SCREEN_WIDTH - 4, i, libtcod.BKGND_NONE, libtcod.RIGHT, itm.name)
+            i = i + 1
+        
+        
+        libtcod.console_flush()
+        
+        choice = key
+        if choice.vk == libtcod.KEY_ESCAPE:
+            break
+       
+    
+    
 def monster_death(monster):
-    #transform it into a nasty corpse! it doesn't block, can't be
-    #attacked and doesn't move
-    message('The ' + monster.name + ' is dead!', libtcod.grey)
-    message('You gain ' + str(monster.fighter.xp) + ' experience points.', libtcod.light_green)
+    global fov_recompute
+    #DIE DIE DIE DIE DIE DIE DIE DIE DIE
+    
+    message('The ' + monster.name + ' is dead!', libtcod.grey)  #YAAAAAAAAASSSSSSS
+    message('You gain ' + str(monster.fighter.xp) + ' experience points.', libtcod.light_green) #yadamnright
     monster.char = '%'
     monster.color = libtcod.light_red
     monster.blocks = False
     if monster.fighter.death_sound:
-        Play_NPCCombat(monster.fighter.death_sound)
+        Play_NPCCombat(monster.fighter.death_sound) # it's all "BLLLEEAAUUUHHHHHGgggg....." excepet 8-bit
+    
+    for obj in monster.fighter.loot: #drop shit
+        dx = libtcod.random_get_int(0, -1, 1)
+        dy = libtcod.random_get_int(0, -1, 1)
+        
+        while map[monster.x+dx][monster.y+dy].block_sight:  #but dont drop shit on walls
+            dx = libtcod.random_get_int(0, -1, 1)
+            dy = libtcod.random_get_int(0, -1, 1)
+            
+        obj.x = monster.x + dx
+        obj.y = monster.y + dy
+        objects.append(obj)
+        
+        monster.fighter.loot.remove(obj)
+        
     monster.fighter = None
     monster.ai = None
     monster.send_to_back()
     monster.name = monster.name + ' Corpse'
     blood_map[monster.x][monster.y] = 1
+    fov_recompute = True
+    
     
 def target_tile(max_range=None):
     global key, mouse
@@ -2106,7 +2488,7 @@ def cast_magicmap():
     #if it is in the item component, it doesnt play until after the effect
     Play_ItemSFX(SFX_MAGICMAPUSE)
     
-    mrange = 18
+    mrange = 600
     
     #make dijsktra map with player as goal
     magic_dijsktra = DijkstraMap(MAP_WIDTH, MAP_HEIGHT)
@@ -2177,10 +2559,18 @@ def cast_fireball():
     if x is None: return 'cancelled'
     message('The fireball explodes, burning everything within ' + str(FIREBALL_RADIUS) + ' tiles!', libtcod.orange)
  
-    for obj in objects:  #damage every fighter in range, including the player
-        if obj.distance(x, y) <= FIREBALL_RADIUS and obj.fighter:
-            message('The ' + obj.name + ' gets burned for ' + str(FIREBALL_DAMAGE) + ' hit points.', libtcod.orange)
-            obj.fighter.take_damage(FIREBALL_DAMAGE)
+    for d in range(-1, FIREBALL_RADIUS, 1):
+        for obj in objects:
+            if int(obj.distance(x, y)) == d and obj.fighter:
+                dmg = FIREBALL_DAMAGE - (d * 4) #damage decays as it moves outward
+                if obj == player:
+                    message('You are burned by the fire!', libtcod.lightest_red)
+                else:
+                    message('The ' + obj.name + ' gets burned by the fire!', libtcod.gray)
+                print obj.name + " takes " + str(dmg)
+                obj.fighter.take_damage(dmg)
+                
+
  
 def cast_confuse():
     #ask the player for a target to confuse
@@ -2195,47 +2585,60 @@ def cast_confuse():
     message('The eyes of the ' + monster.name + ' look vacant, as he starts to stumble around!', libtcod.light_green)
 
 def throw_gold():
-       
+    print "" 
+    print "throwing gold .. "
+    
     found = False
+    n = 1
     for itm in inventory:
         if itm.name == "gold":
-            #if itm.item.count == 1:
-            #    n = 1
-            #else:
-            n = random.randrange(1, itm.item.count+1)
-            itm.item.count = (itm.item.count - n) +1
+            if itm.item.count > 1:
+                n = random.randrange(1, itm.item.count+1)
+                itm.item.count = (itm.item.count - n)
+                
             if itm.item.count <= 0:
                 inventory.remove(itm)
-            found = True
+                found = True
+                
         if found:
             break
-            
+    
     message("You throw " + str(n) + " gold up in the air and watch as it falls to the ground.", libtcod.white)
               
-    dx = random.randrange(-1, 1)
-    dy = random.randrange(-1, 1)
+    dx = libtcod.random_get_int(0, -1, 1)
+    dy = libtcod.random_get_int(0, -1, 1)
+    #dx = random.randrange(-1, 1)
+    #dy = random.randrange(-1, 1)
+    
+    while map[player.x+dx][player.y+dy].block_sight:
+       dx = libtcod.random_get_int(0, -1, 1)
+       dy = libtcod.random_get_int(0, -1, 1)
+        
     
     added = False
     for obj in objects:
-        if added:
-            break
-        #print obj.name
-        if obj.name == "gold" and obj.x == player.x+dx and obj.y == player.y+dy:
+        if obj.name == "Gold" and obj.x == player.x+dx and obj.y == player.y+dy:
             #found gold pile at desired position
-                #print "added " + str(n) + " to pile at " + str(dx) + "," + str(dy) + " (from" + str(obj.item.count) + ")"
                 obj.item.count = obj.item.count + n
                 print str(obj.item.count)
+                obj.send_to_back
                 added = True
-    else:
+                
+        if added:
+            break
+            
+    if not added:
         #create a new gold pile
+        print "new gold pile at " + str(player.x+dx) + "," + str(player.y+dy) + " of size " + str(n)
         item_component = Item(stacks=True, count=n, use_function=throw_gold, pickup_sound=SFX_GOLDPICKUP, use_sound=SFX_GOLDPICKUP)
-        item = Object(player.x+dx, player.y+dy, '$', 'gold', libtcod.light_yellow, item=item_component)
+        item = Object(player.x+dx, player.y+dy, '$', 'Gold', libtcod.light_yellow, item=item_component)
     
         objects.append(item)
-
+        item.send_to_back
+        
     gold_dijkstra.clear_goals()
     for obj in objects:
-        if obj.name == "gold":
+        if obj.name == "Gold":
             gold_dijkstra.add_goal(obj.x, obj.y)
     gold_dijkstra.recalculate_single(obj.x, obj.y)
     
@@ -2243,6 +2646,7 @@ def save_game():
     #open a new empty shelve (possibly overwriting an old one) to write the game data
     file = shelve.open('savegame', 'n')
     file['map'] = map
+    file['blood_map'] = blood_map
     file['objects'] = objects
     file['player_index'] = objects.index(player)  #index of player in objects list
     file['stairs_index'] = objects.index(stairs)  #same for the stairs
@@ -2250,11 +2654,12 @@ def save_game():
     file['game_msgs'] = game_msgs
     file['game_state'] = game_state
     file['dungeon_level'] = dungeon_level
+    file['turn_count'] = turn_count
     file.close()
  
 def load_game():
     #open the previously saved shelve and load the game data
-    global map, objects, player, stairs, inventory, game_msgs, game_state, dungeon_level
+    global map, objects, player, stairs, inventory, game_msgs, game_state, dungeon_level, turn_count, blood_map
  
     file = shelve.open('savegame', 'r')
     map = file['map']
@@ -2265,16 +2670,18 @@ def load_game():
     game_msgs = file['game_msgs']
     game_state = file['game_state']
     dungeon_level = file['dungeon_level']
+    turn_count = file['turn_count']
+    blood_map = file['blood_map']
     file.close()
  
     initialize_fov()
  
 def new_game():
-    global player, inventory, game_msgs, game_state, dungeon_level
+    global player, inventory, game_msgs, game_state, dungeon_level, turn_count
  
     #create object representing the player
-    fighter_component = Fighter(hp=100, ac=10, strength=10, dexterity=14, constitution=10, 
-                                intelligence=10, wisdom=10, charisma=10, damage=2, luck=10, speed=3, xp=0, 
+    
+    fighter_component = Fighter(hp=100, ac=10, strength=10, dexterity=14, luck=10, damage=0, speed=3, xp=0, 
                                 atk_sound=SFX_PLAYERATK, death_function=player_death)
     player = Object(0, 0, chr(2), 'Heroman', libtcod.white, blocks=True, fighter=fighter_component)
  
@@ -2283,9 +2690,11 @@ def new_game():
     #used for oil lamp / light
     player.max_oil_level = 100
     player.oil = player.max_oil_level
+    update_torch()
  
     #generate map (at this point it's not drawn to the screen
     dungeon_level = 1
+    turn_count = 0
     #make_map()
     make_bsp()
     
@@ -2302,13 +2711,17 @@ def new_game():
  
     #initial equipment: a dagger
     equipment_component = Equipment(slot='right hand', strength_bonus=2, damage_bonus=8, tohit_bonus=5)
-    obj = Object(0, 0, '-', 'dagger', libtcod.sky, equipment=equipment_component)
+    obj = Object(0, 0, '-', 'Chipped Dagger', libtcod.sky, equipment=equipment_component)
     inventory.append(obj)
     equipment_component.equip()
     
-    #create a scroll of magic mapping
-    item_component = Item(stacks=True, count=1, use_function=cast_magicmap, pickup_sound=SFX_SCROLLPICKUP, use_sound=None)
-    item = Object(0, 0, '#', 'Scroll of Magic Map', libtcod.light_yellow, item=item_component)
+    #start with a bow and some arrows
+    equipment_component = Equipment(slot='right hand', shotrange=5, range_damage=10)
+    item = Object(0, 0, ']', 'Bow', libtcod.darker_sepia, equipment=equipment_component)
+    inventory.append(item)
+    
+    item_component = Item(stacks=True, count=5, use_function=None, pickup_sound=None, use_sound=None)
+    item = Object(0, 0, '/', 'Arrow', libtcod.sepia, item=item_component)
     inventory.append(item)
     
 def next_level():
@@ -2340,7 +2753,7 @@ def initialize_fov():
     libtcod.console_clear(con)  #unexplored areas start black (which is the default background color)
  
 def play_game():
-    global key, mouse, player_dijkstra, gold_dijkstra, sound_dijkstra, scent_map, blood_map
+    global key, mouse, player_dijkstra, gold_dijkstra, sound_dijkstra, scent_map, blood_map, turn_count
     
     player_action = None
  
@@ -2353,7 +2766,7 @@ def play_game():
     player_dijkstra = DijkstraMap(MAP_WIDTH, MAP_HEIGHT)
     gold_dijkstra = DijkstraMap(MAP_WIDTH, MAP_HEIGHT)
     sound_dijkstra = DijkstraMap(MAP_WIDTH, MAP_HEIGHT)
-    sound_dijkstra._clear_map(15)
+    sound_dijkstra._clear_map(0)
     
     scent_map = [[ 0 for y in range(MAP_HEIGHT) ]
            for x in range(MAP_WIDTH) ]
@@ -2374,6 +2787,8 @@ def play_game():
         
         #DijkHeat(player_dijkstra)
         DijkHeat(sound_dijkstra, False)
+        #DijkHeat(player_dijkstra, True)
+        #DijkHeat(player_dijkstra, False)
         libtcod.console_flush()
         
         #level up if needed
@@ -2394,11 +2809,11 @@ def play_game():
             break
  
         #let monsters take their turn
-        if game_state == 'playing' and player_action != 'didnt-take-turn':
+        elif game_state == 'playing' and player_action != 'didnt-take-turn':
         
-            #do one-a-turn things
-            Burn_Torch()
-            
+            #do once-a-turn things
+            update_torch()
+            turn_count = turn_count + 1
         
             for object in objects:
                 if object.ai:
