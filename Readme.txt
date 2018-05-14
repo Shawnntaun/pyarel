@@ -60,11 +60,29 @@ Yb,_,dP       `8b,          88       Yb, `YbadP' ,d8b,_
     * Change log *
     **************
     
+    v 0.0.0.4
+    dunno yet
+    
+        1) Overview
+            A) Currently sticking with possibly overly-complicated formatting
+            
+        2) New Mechanics
+            A) Ranged Weapons
+                - Implemented ranged weapon and ammo system for the player
+                    - Need to implement this for enemies
+    
+        3) Bug Fixes
+            A) Context Tips
+                - Corrected issue with kicking and door-closing context tips
+            B) Interactions
+                - Small fixes to kicking mechanics checks
+                - Fixed and optimized gold throwing
+    
     v 0.0.0.3 
     4/27/18
     
         1) Overview
-            A)Decided it was a good idea to start a change long.
+            A) Decided it was a good idea to start a change long.
                 - Started a change log    
                 - Started possibly overly-complicated formatting for said change log.
             
@@ -84,7 +102,7 @@ Yb,_,dP       `8b,          88       Yb, `YbadP' ,d8b,_
             A) New Player Tips
                 - Interaction/context tips will show up on the first dungeon level
                 
-        4) Bug Fixes
+        5) Bug Fixes
             A) Doors
                 - Updated placement conditions
                     - This seems to have corrected issue of actors being able to walk off the map

@@ -1577,12 +1577,13 @@ def try_kick():
                         player.fighter.take_damage(3)
                         
                 else:
-                    if (map[obj.x+dx][obj.y+dy].block_sight and map[obj.x+dx][obj.y+dy].is_door == False) or map[obj.x+dx][obj.y+dy].blocked:
+                    
+                    if obj.fighter:
+                            message('The ' + obj.name + ' dodges your kick.', libtcod.gray)
+                    
+                    elif (map[obj.x+dx][obj.y+dy].block_sight and map[obj.x+dx][obj.y+dy].is_door == False) or map[obj.x+dx][obj.y+dy].blocked:
                         message('You kick the ' + obj.name +', but it does not budge.', libtcod.gray)
                         
-                    elif obj.fighter:
-                            message('The ' + obj.name + ' dodges your kick.', libtcod.gray)
-                                                  
                     else:
                         obj.x = obj.x + dx
                         obj.y = obj.y +dy
@@ -1750,9 +1751,9 @@ def place_objects(room):
     #chance of each item (by default they have a chance of 0 at level 1, which then goes up)
     item_chances = {}
     item_chances['bow'] =       2
-    item_chances['arrow'] =     5
+    item_chances['arrow'] =     10
     item_chances['gold'] =      5 #always shows up  
-    item_chances['oil'] =       45 #always shows up
+    item_chances['oil'] =       40 #always shows up
     item_chances['heal'] =      45  #healing potion always shows up, even if all other items have 0 chance
     item_chances['magic map'] = 5
     item_chances['lightning'] = from_dungeon_level([[25, 3]])
@@ -2166,10 +2167,12 @@ def inventory_menu(header):
     else:
         options = []
         for item in inventory:
-            text = item.name + " (" + str(item.item.count) + ")"
+            text = item.name
+            if item.item.count > 1:
+                text = text + " (x" + str(item.item.count) + ")"
             #show additional information, in case it's equipped
             if item.equipment and item.equipment.is_equipped:
-                text = text + ' (on ' + item.equipment.slot + ')'
+                text = "*" + item.name + "*"
             options.append(text)
  
     index = menu(header, options, INVENTORY_WIDTH)
@@ -2232,6 +2235,20 @@ def handle_keys():
                 elif not tryshot == 'cancelled':
                     return 'fired-shot'
 
+            elif key_char == 'j':
+                #create a stack of arrows
+                found = False
+                for itm in inventory:
+                    if itm.name == "Arrow":
+                        itm.item.count = itm.item.count + 20
+                        found = True
+                        break
+                if not found:
+                    item_component = Item(stacks=True, count=20, use_function=None, pickup_sound=None, use_sound=None)
+                    item = Object(0, 0, '/', 'Arrow', libtcod.sepia, item=item_component)
+                    
+                    inventory.append(item)
+                
             elif key_char == 'g':
                 #pick up an item
                 for object in objects:  #look for an item in the player's tile
@@ -2332,7 +2349,13 @@ def player_death(player):
 def death_menu():     
 
     Play_BGM(BGM_DEATHMUSIC)
-
+    
+    screen_yellow = libtcod.Color(249,220,92)
+    screen_blue = libtcod.light_azure
+    screen_red = libtcod.Color(254,95,85)
+    screen_purple = libtcod.Color(102,46,155)
+    
+     
     while True:
         #render the screen. this erases the inventory and shows the names of objects under the mouse.
         libtcod.console_set_default_background(0, libtcod.black)
@@ -2344,23 +2367,41 @@ def death_menu():
             libtcod.console_print_ex(0, x, 1, libtcod.BKGND_SET, libtcod.CENTER, " ")
         libtcod.console_print_ex(0, SCREEN_WIDTH/2, 1, libtcod.BKGND_SET, libtcod.CENTER, "You Died!")
         
-        libtcod.console_set_default_foreground(0, libtcod.lightest_red)
+        libtcod.console_set_default_foreground(0, libtcod.lighter_gray)
         libtcod.console_print_ex(0, SCREEN_WIDTH/2, 2, libtcod.BKGND_NONE, libtcod.CENTER, "[ESC] to Close")
-        
-        libtcod.console_set_default_foreground(0, libtcod.white)
+
+        libtcod.console_set_default_foreground(0, screen_yellow)
         libtcod.console_print_ex(0, SCREEN_WIDTH/2, 4, libtcod.BKGND_NONE, libtcod.CENTER, player.name)
-        
-        libtcod.console_set_default_foreground(0, libtcod.light_yellow)
         libtcod.console_print_ex(0, SCREEN_WIDTH/2, 5, libtcod.BKGND_NONE, libtcod.CENTER, "Level " + str(player.level))
-        libtcod.console_print_ex(0, SCREEN_WIDTH/2, 6, libtcod.BKGND_NONE, libtcod.CENTER, str(turn_count) + " Turns")
         
-        libtcod.console_set_default_foreground(0, libtcod.light_azure)
+        libtcod.console_set_default_foreground(0, screen_purple)
+        libtcod.console_print_ex(0, SCREEN_WIDTH/2, 6, libtcod.BKGND_NONE, libtcod.CENTER, str(turn_count) + " Turns")
+        libtcod.console_print_ex(0, SCREEN_WIDTH/2, 7, libtcod.BKGND_NONE, libtcod.CENTER, "Dungeon Level " + str(dungeon_level))
+        
+        libtcod.console_set_default_foreground(0, screen_blue)
         libtcod.console_print_ex(0, SCREEN_WIDTH - 6, 6, libtcod.BKGND_NONE, libtcod.RIGHT, "Inventory")
         libtcod.console_set_default_foreground(0, libtcod.light_gray)
         i = 8
         for itm in inventory:
-            libtcod.console_print_ex(0, SCREEN_WIDTH - 4, i, libtcod.BKGND_NONE, libtcod.RIGHT, itm.name)
+            msg = itm.name
+            if itm.item.count > 1:
+                msg = msg + " (x" + str(itm.item.count) + ")"
+            libtcod.console_print_ex(0, SCREEN_WIDTH - 4, i, libtcod.BKGND_NONE, libtcod.RIGHT, msg)
             i = i + 1
+        
+        libtcod.console_set_default_foreground(0, screen_blue)
+        libtcod.console_print_ex(0, 4, 6, libtcod.BKGND_NONE, libtcod.LEFT, "Kills")
+        i = 8
+        if len(kill_counts) == 0:
+            libtcod.console_set_default_foreground(0, screen_yellow)
+            libtcod.console_print_ex(0, 6, i, libtcod.BKGND_NONE, libtcod.LEFT, "No kills,")
+            libtcod.console_print_ex(0, 8, i+1, libtcod.BKGND_NONE, libtcod.LEFT, "Pacifist mode!")
+            
+        else:
+            libtcod.console_set_default_foreground(0, libtcod.lighter_gray)
+            for pair in kill_counts:
+                libtcod.console_print_ex(0, 6, i, libtcod.BKGND_NONE, libtcod.LEFT, pair[0] + " x" + str(pair[1]))
+                i = i + 1
         
         
         libtcod.console_flush()
@@ -2372,9 +2413,22 @@ def death_menu():
     
     
 def monster_death(monster):
-    global fov_recompute
+    global fov_recompute, kill_counts
     #DIE DIE DIE DIE DIE DIE DIE DIE DIE
     
+    found = False
+    for pair in kill_counts:
+        if found:
+            break
+            
+        if pair[0] == monster.name:
+            pair[1] = pair[1] + 1
+            found = True
+            
+    if not found:
+        kill_counts.append([monster.name, 1])
+        
+        
     message('The ' + monster.name + ' is dead!', libtcod.grey)  #YAAAAAAAAASSSSSSS
     message('You gain ' + str(monster.fighter.xp) + ' experience points.', libtcod.light_green) #yadamnright
     monster.char = '%'
@@ -2585,23 +2639,24 @@ def cast_confuse():
     message('The eyes of the ' + monster.name + ' look vacant, as he starts to stumble around!', libtcod.light_green)
 
 def throw_gold():
-    print "" 
-    print "throwing gold .. "
+
     
     found = False
     n = 1
     for itm in inventory:
+    
+        if found:
+            break
+            
         if itm.name == "gold":
+            found = True
             if itm.item.count > 1:
-                n = random.randrange(1, itm.item.count+1)
+                n = libtcod.random_get_int(0, 1, itm.item.count)
                 itm.item.count = (itm.item.count - n)
                 
             if itm.item.count <= 0:
                 inventory.remove(itm)
-                found = True
-                
-        if found:
-            break
+
     
     message("You throw " + str(n) + " gold up in the air and watch as it falls to the ground.", libtcod.white)
               
@@ -2629,18 +2684,17 @@ def throw_gold():
             
     if not added:
         #create a new gold pile
-        print "new gold pile at " + str(player.x+dx) + "," + str(player.y+dy) + " of size " + str(n)
         item_component = Item(stacks=True, count=n, use_function=throw_gold, pickup_sound=SFX_GOLDPICKUP, use_sound=SFX_GOLDPICKUP)
         item = Object(player.x+dx, player.y+dy, '$', 'Gold', libtcod.light_yellow, item=item_component)
     
         objects.append(item)
         item.send_to_back
         
-    gold_dijkstra.clear_goals()
-    for obj in objects:
-        if obj.name == "Gold":
-            gold_dijkstra.add_goal(obj.x, obj.y)
-    gold_dijkstra.recalculate_single(obj.x, obj.y)
+        gold_dijkstra.clear_goals()
+        for obj in objects:
+            if obj.name == "Gold":
+                gold_dijkstra.add_goal(obj.x, obj.y)
+        gold_dijkstra.recalculate_single(obj.x, obj.y)
     
 def save_game():
     #open a new empty shelve (possibly overwriting an old one) to write the game data
@@ -2655,11 +2709,12 @@ def save_game():
     file['game_state'] = game_state
     file['dungeon_level'] = dungeon_level
     file['turn_count'] = turn_count
+    file['kill_counts'] = kill_counts
     file.close()
  
 def load_game():
     #open the previously saved shelve and load the game data
-    global map, objects, player, stairs, inventory, game_msgs, game_state, dungeon_level, turn_count, blood_map
+    global map, objects, player, stairs, inventory, game_msgs, game_state, dungeon_level, turn_count, blood_map, kill_counts
  
     file = shelve.open('savegame', 'r')
     map = file['map']
@@ -2672,12 +2727,13 @@ def load_game():
     dungeon_level = file['dungeon_level']
     turn_count = file['turn_count']
     blood_map = file['blood_map']
+    kill_counts = file['kill_counts']
     file.close()
  
     initialize_fov()
  
 def new_game():
-    global player, inventory, game_msgs, game_state, dungeon_level, turn_count
+    global player, inventory, game_msgs, game_state, dungeon_level, turn_count, kill_counts, scent_map, blood_map
  
     #create object representing the player
     
@@ -2686,6 +2742,14 @@ def new_game():
     player = Object(0, 0, chr(2), 'Heroman', libtcod.white, blocks=True, fighter=fighter_component)
  
     player.level = 1
+    
+    kill_counts = []
+    
+    scent_map = [[ 0 for y in range(MAP_HEIGHT) ]
+           for x in range(MAP_WIDTH) ]
+        
+    blood_map = [[ 0 for y in range(MAP_HEIGHT) ]
+           for x in range(MAP_WIDTH) ]   
     
     #used for oil lamp / light
     player.max_oil_level = 100
@@ -2753,7 +2817,7 @@ def initialize_fov():
     libtcod.console_clear(con)  #unexplored areas start black (which is the default background color)
  
 def play_game():
-    global key, mouse, player_dijkstra, gold_dijkstra, sound_dijkstra, scent_map, blood_map, turn_count
+    global key, mouse, player_dijkstra, gold_dijkstra, sound_dijkstra, turn_count
     
     player_action = None
  
@@ -2761,18 +2825,13 @@ def play_game():
     key = libtcod.Key()
     
     Play_BGM(BGM_CAVEMUSIC)
+
     
     #make the initial dijkstras / AI Maps
     player_dijkstra = DijkstraMap(MAP_WIDTH, MAP_HEIGHT)
     gold_dijkstra = DijkstraMap(MAP_WIDTH, MAP_HEIGHT)
     sound_dijkstra = DijkstraMap(MAP_WIDTH, MAP_HEIGHT)
-    sound_dijkstra._clear_map(0)
-    
-    scent_map = [[ 0 for y in range(MAP_HEIGHT) ]
-           for x in range(MAP_WIDTH) ]
-        
-    blood_map = [[ 0 for y in range(MAP_HEIGHT) ]
-           for x in range(MAP_WIDTH) ]    
+    sound_dijkstra._clear_map(0) 
     
     player_dijkstra.add_goal(player.x, player.y)
     player_dijkstra.recalculate_map()
@@ -2814,6 +2873,7 @@ def play_game():
             #do once-a-turn things
             update_torch()
             turn_count = turn_count + 1
+                
         
             for object in objects:
                 if object.ai:
