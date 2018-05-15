@@ -542,7 +542,7 @@ class DijkstraMap:
         
 class Fighter:
     #combat-related properties and methods (monster, player, NPC).
-    def __init__(self, hp, ac, strength, dexterity, luck, damage, speed, xp,
+    def __init__(self, hp, ac, strength, dexterity, luck, damage, speed, xp, currency=None, 
                 atk_sound=None, hit_sound=None, death_sound=None, death_function=None):
         self.base_max_hp = hp
         self.hp = hp
@@ -552,6 +552,7 @@ class Fighter:
         self.base_luck = luck
         self.base_damage = damage
         self.xp = xp
+        self.currency = currency
         self.counter = 0
         self.base_speed = speed
         self.atk_sound = atk_sound
@@ -589,6 +590,10 @@ class Fighter:
     def max_hp(self):  #return actual max_hp, by summing up the bonuses from all equipped items
         bonus = sum(equipment.max_hp_bonus for equipment in get_all_equipped(self.owner))
         return self.base_max_hp + bonus
+ 
+    @property
+    def currency(self):  #return player currency
+        return self.currency
  
     @property
     def damage(self):  #return actual damage for combat damage
@@ -2029,6 +2034,7 @@ def render_all():
     libtcod.console_set_default_foreground(panel, libtcod.white)
     libtcod.console_print_ex(panel, 1, 5, libtcod.BKGND_NONE, libtcod.LEFT, 'Dungeon level ' + str(dungeon_level))
     libtcod.console_print_ex(panel, 1, 6, libtcod.BKGND_NONE, libtcod.LEFT, "Turn " + str(turn_count))
+    libtcod.console_print_ex(panel, 1, 6, libtcod.BKGND_NONE, libtcod.LEFT, "Turn " + str(turn_count) + "  Gold: " + str(player.fighter.currency))
  
     #display names of objects under the mouse
     libtcod.console_set_default_foreground(panel, libtcod.light_gray)
@@ -2450,6 +2456,22 @@ def monster_death(monster):
         objects.append(obj)
         
         monster.fighter.loot.remove(obj)
+    
+	#Setting up the gold drop
+    gold_chance = random.randint(1,21)
+    if gold_chance >=1 and gold_chance <=11:
+        gold_drop = random.randint(1,3)
+    elif gold_chance >=12 and gold_chance <=18:
+        gold_drop = random.randint(4,6)
+    elif gold_chance >=19 and gold_chance <=20:
+        gold_drop = random.randint(7,9)
+    elif gold_chance == 21:
+        gold_drop = random.randint(10,15)
+        
+    player.fighter.currency += gold_drop
+    gold_drop_amount = str(gold_drop)
+    
+    message('The ' + monster.name + ' dropped ' + gold_drop_amount + ' gold!', libtcod.gold)
         
     monster.fighter = None
     monster.ai = None
@@ -2737,7 +2759,7 @@ def new_game():
  
     #create object representing the player
     
-    fighter_component = Fighter(hp=100, ac=10, strength=10, dexterity=14, luck=10, damage=0, speed=3, xp=0, 
+    fighter_component = Fighter(hp=100, ac=10, strength=10, dexterity=14, luck=10, damage=0, speed=3, xp=0, currency=0 
                                 atk_sound=SFX_PLAYERATK, death_function=player_death)
     player = Object(0, 0, chr(2), 'Heroman', libtcod.white, blocks=True, fighter=fighter_component)
  
