@@ -1,32 +1,21 @@
-                                                                                                    
-     ***** *    **   ***                                                                     ***    
-  ******  *  *****    ***                            *                                        ***   
- **   *  *     *****   ***                          **                                         **   
-*    *  **     * **      **                         **                                         **   
-    *  ***     *         **              ****     ********            ***  ****                **   
-   **   **     *         **    ***      * **** * ********     ****     **** **** *    ***      **   
-   **   **     *         **   * ***    **  ****     **       * ***  *   **   ****    * ***     **   
-   **   **     *         **  *   ***  ****          **      *   ****    **          *   ***    **   
-   **   **     *         ** **    ***   ***         **     **    **     **         **    ***   **   
-   **   **     *         ** ********      ***       **     **    **     **         ********    **   
-    **  **     *         ** *******         ***     **     **    **     **         *******     **   
-     ** *      *         *  **         ****  **     **     **    **     **         **          **   
-      ***      ***      *   ****    * * **** *      **     **    **     ***        ****    *   **   
-       ******** ********     *******     ****        **     ***** **     ***        *******    *** *
-         ****     ****        *****                          ***   **                *****      *** 
-                                                                                                    
-                                                                                                    
-                                                                                                    
+
+           ,ggg,    d8' ,ggggggggggg,                   
+          dP""8I   d8' dP"""88""""""Y8,           ,dPYb,
+         dP   88  ""   Yb,  88      `8b           IP'`Yb
+        dP    88        `"  88      ,8P           I8  8I
+       ,8'    88            88aaaad8P"            I8  8'
+       d88888888            88""""Yb,     ,ggg,   I8 dP 
+ __   ,8"     88            88     "8b   i8" "8i  I8dP  
+dP"  ,8P      Y8            88      `8i  I8, ,8I  I8P   
+Yb,_,dP       `8b,          88       Yb, `YbadP' ,d8b,_ 
+ "Y8P"         `Y8          88        Y8888P"Y8888P'"Y88
  
-Westarel Readme
+ A'Rel Readme
  
- v 0.0.0.1
+ v 0.0.0.3
  ObservantDoggo
  
  Based on libtcod
- 
- 
- WHY ARE YOU LOOKING AT THIS? SAVE YOURSELF; STOP NOW. THIS IS ALL AWFUL.
  
  
  *********
@@ -34,6 +23,9 @@ Westarel Readme
  *********
  
  You will need Python (v2.7.13) installed to run.   (https://www.python.org/downloads/)
+ You will need PyGame installed for audio to work   (https://www.pygame.org/wiki/GettingStarted)
+           No-Audio version will be added. 
+           You could also comment-out or remove audio-related code if desired.
  
  **************
  *  CONTROLS  *
